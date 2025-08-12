@@ -1,50 +1,63 @@
+// src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import AdminPanel from './admin/AdminPanel';
 
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
+import BuyPage from './pages/BuyPage';
+import SellPage from './pages/SellPage';
+import DividendsPage from './pages/DividendsPage';
+import StocksPage from './pages/StocksPage';
+import ExchangesPage from './pages/ExchangesPage';
+import PortfolioReport from './pages/PortfolioReport';
 
-function App() {
+import AdminPanel from './admin/AdminPanel';
+
+export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function getSession() {
-      const { data, error } = await supabase.auth.getSession();
-      console.log('getSession data:', data);
-      console.log('getSession error:', error);
+    let unsub = () => {};
+    (async () => {
+      const { data } = await supabase.auth.getSession();
       setSession(data?.session ?? null);
       setLoading(false);
-    }
-    getSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('Auth state changed:', session);
-      setSession(session);
-    });
+      const sub = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+      unsub = () => sub?.data?.subscription?.unsubscribe?.();
+    })();
 
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    return () => unsub();
   }, []);
 
-  if (loading) return <div>Загрузка...</div>;
+  if (loading) return <div>Загрузка…</div>;
 
-  if (!session) {
-    return <LoginPage onLogin={setSession} />;
-  }
+  // Не залогинен — всегда показываем страницу логина
+  if (!session) return <LoginPage onLogin={setSession} />;
 
+  // Залогинен — доступны все маршруты
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/*" element={<Dashboard session={session} />} />
-        <Route path="*" element={<Navigate to="/" />} />
+        {/* главная (у тебя внутри Dashboard уже есть вкладки) */}
+        <Route path="/" element={<Dashboard session={session} />} />
+
+        {/* прямые маршруты на страницы из /pages при необходимости */}
+        <Route path="/buy" element={<BuyPage />} />
+        <Route path="/sell" element={<SellPage />} />
+        <Route path="/dividends" element={<DividendsPage />} />
+        <Route path="/stocks" element={<StocksPage />} />
+        <Route path="/exchanges" element={<ExchangesPage />} />
+        <Route path="/report" element={<PortfolioReport />} />
+
+        {/* админка — важна позиция до catch-all */}
         <Route path="/admin" element={<AdminPanel />} />
+
+        {/* все остальное — на главную */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
 }
-
-export default App;

@@ -54,7 +54,7 @@ export default function Dashboard({ session }) {
             <Button color="inherit" onClick={() => navigate('/account/password')}>
               Сменить пароль
             </Button>
-            <Button color="inherit" onClick={signOut}>Выйти</Button>
+            <Button color="inherit" onClick={() => navigate('/logout')}>Выйти</Button>
           </Stack>
         </Toolbar>
       </AppBar>

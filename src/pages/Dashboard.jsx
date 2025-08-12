@@ -16,23 +16,28 @@ export default function Dashboard({ session }) {
 
   async function signOut() {
     try {
+      // Глобальный выход (отзывает refresh-токены везде)
       const { error } = await supabase.auth.signOut({ scope: 'global' });
 
-    // Если сессии уже нет — это не ошибка, просто продолжаем
-       if (error && error.message !== 'session_not_found') {
-      // Если другая ошибка — пробуем локальный логаут
-       await supabase.auth.signOut({ scope: 'local' });
+      // Если сессии уже нет — это ок, идём дальше.
+      if (error && error.message !== 'session_not_found') {
+        // Любая другая ошибка — делаем локальный выход.
+        await supabase.auth.signOut({ scope: 'local' });
       }
     } catch {
-    // Если что-то пошло не так, пробуем локальный логаут
+      // На случай сетевых/прочих ошибок — локальный выход.
       await supabase.auth.signOut({ scope: 'local' });
     } finally {
-    // На всякий случай чистим локальный токен из localStorage
+      // Подчистим все возможные supabase-ключи из localStorage.
       try {
-        const keyPrefix = 'sb-' + btoa(process.env.REACT_APP_SUPABASE_URL || '').replace(/=+$/, '') + '-auth-token';
-        localStorage.removeItem(keyPrefix);
+        Object.keys(localStorage).forEach((k) => {
+          if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
+            localStorage.removeItem(k);
+          }
+        });
       } catch {}
-    // Перенаправляем на страницу логина
+
+      // И уводим на логин.
       window.location.href = '/';
     }
   }

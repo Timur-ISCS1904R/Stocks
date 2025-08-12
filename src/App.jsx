@@ -1,13 +1,12 @@
 // src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import AdminPanel from './admin/AdminPanel';
 
-// --- Встроенная страница смены пароля (без отдельного файла) ---
 import { Box, Paper, TextField, Button, Typography, Alert } from '@mui/material';
 
 const policy = {
@@ -45,7 +44,8 @@ function ChangePasswordPage({ onDone }) {
     const { data: sdata } = await supabase.auth.getSession();
     const email = sdata?.session?.user?.email;
     const token = sdata?.session?.access_token;
-    if (!email || !token) return setErr('Нет активной сессии');
+    const uid = sdata?.session?.user?.id;
+    if (!email || !token || !uid) return setErr('Нет активной сессии');
 
     // проверка старого пароля
     const reauth = await supabase.auth.signInWithPassword({ email, password: oldPw });
@@ -55,13 +55,21 @@ function ChangePasswordPage({ onDone }) {
     const upd = await supabase.auth.updateUser({ password: newPw });
     if (upd.error) return setErr('Не удалось обновить пароль: ' + upd.error.message);
 
-    // отметка первого входа
+    // отметка первого входа — сначала через бэкенд
     try {
       const base = process.env.REACT_APP_ADMIN_API || 'http://localhost:4000';
       await fetch(`${base}/api/self/complete-first-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       });
+    } catch {}
+
+    // план Б: пробуем напрямую (если есть политика self-update)
+    try {
+      await supabase
+        .from('users')
+        .update({ must_change_password: false, first_login_at: new Date().toISOString() })
+        .eq('user_id', uid);
     } catch {}
 
     setOk('Пароль успешно изменён');
@@ -82,7 +90,6 @@ function ChangePasswordPage({ onDone }) {
     </Box>
   );
 }
-// --- конец встроенной страницы смены пароля ---
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -117,7 +124,7 @@ export default function App() {
   if (loading) return <div>Загрузка…</div>;
   if (!session) return <LoginPage onLogin={setSession} />;
 
-  // Принудительная смена пароля при первом входе
+  // Принудительная смена пароля
   if (profile?.must_change_password) {
     return (
       <BrowserRouter>

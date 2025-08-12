@@ -42,15 +42,14 @@ export default function AdminPanel() {
   const [auditFilter, setAuditFilter] = useState({ table: '', user: '' });
 
   const usersById = useMemo(() => new Map(users.map(u => [u.id, u])), [users]);
+  const navigate = useNavigate();
 
   function getPerm(userId) {
     return userPerms.find(p => p.user_id === userId) || {
       user_id: userId, can_view_all: false, can_edit_all: false, can_edit_dictionaries: false
     };
   }
-  
-  const navigate = useNavigate();
-  
+
   async function loadAll() {
     try {
       setErr('');
@@ -81,24 +80,52 @@ export default function AdminPanel() {
   }
 
   useEffect(() => { loadAll(); }, []);
-  useEffect(() => { if (tab === 4) loadAudit(); }, [tab]); // вкладка "Аудит"
+  useEffect(() => { if (tab === 4) loadAudit(); }, [tab]);
 
-  // --- действия над правами/флагами ---
+  // --- Оптимистические обновления прав/флагов ---
   async function savePerm(userId, patch) {
-    const current = getPerm(userId);
-    const currentIsAdmin = users.find(u => u.id === userId)?.is_admin || false;
+    const prevUsers = [...users];
+    const prevPerms = [...userPerms];
 
-    await adminFetch('/api/permissions', {
-      method: 'POST',
-      body: JSON.stringify({
-        user_id: userId,
-        can_view_all: patch.can_view_all ?? current.can_view_all,
-        can_edit_all: patch.can_edit_all ?? current.can_edit_all,
-        can_edit_dictionaries: patch.can_edit_dictionaries ?? current.can_edit_dictionaries,
-        is_admin: patch.is_admin ?? currentIsAdmin
-      })
+    // оптимистично обновляем is_admin
+    if (patch.hasOwnProperty('is_admin')) {
+      setUsers(us => us.map(u => u.id === userId ? { ...u, is_admin: !!patch.is_admin } : u));
+    }
+    // оптимистично обновляем user_permissions
+    setUserPerms(perms => {
+      const curr = perms.find(p => p.user_id === userId) || {
+        user_id: userId, can_view_all: false, can_edit_all: false, can_edit_dictionaries: false
+      };
+      const next = {
+        ...curr,
+        ...(['can_view_all','can_edit_all','can_edit_dictionaries'].reduce((acc, k) => (
+          patch.hasOwnProperty(k) ? { ...acc, [k]: !!patch[k] } : acc
+        ), {}))
+      };
+      const others = perms.filter(p => p.user_id !== userId);
+      return [next, ...others];
     });
-    await loadAll();
+
+    try {
+      const curr = getPerm(userId);
+      const currIsAdmin = users.find(u => u.id === userId)?.is_admin || false;
+
+      await adminFetch('/api/permissions', {
+        method: 'POST',
+        body: JSON.stringify({
+          user_id: userId,
+          can_view_all: patch.hasOwnProperty('can_view_all') ? !!patch.can_view_all : curr.can_view_all,
+          can_edit_all: patch.hasOwnProperty('can_edit_all') ? !!patch.can_edit_all : curr.can_edit_all,
+          can_edit_dictionaries: patch.hasOwnProperty('can_edit_dictionaries') ? !!patch.can_edit_dictionaries : curr.can_edit_dictionaries,
+          is_admin: patch.hasOwnProperty('is_admin') ? !!patch.is_admin : currIsAdmin
+        })
+      });
+      // без loadAll — UI уже синхронизирован
+    } catch (e) {
+      setUsers(prevUsers);
+      setUserPerms(prevPerms);
+      setErr(e.message || 'Ошибка сохранения прав');
+    }
   }
 
   async function upsertGrant(payload) {
@@ -188,7 +215,7 @@ export default function AdminPanel() {
           <Tab label="Аудит" icon={<ListIcon />} iconPosition="start" />
         </Tabs>
 
-        {/* --- TAB 0: Пользователи и флаги --- */}
+        {/* TAB 0: Пользователи + флаги */}
         {tab === 0 && (
           <Paper sx={{ p: 2 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
@@ -219,20 +246,16 @@ export default function AdminPanel() {
                       <TableRow key={u.id}>
                         <TableCell>{u.email || u.id}</TableCell>
                         <TableCell align="center">
-                          <Switch checked={!!u.is_admin}
-                                  onChange={e => savePerm(u.id, { is_admin: e.target.checked })}/>
+                          <Switch checked={!!u.is_admin} onChange={e => savePerm(u.id, { is_admin: e.target.checked })}/>
                         </TableCell>
                         <TableCell align="center">
-                          <Switch checked={!!p.can_view_all}
-                                  onChange={e => savePerm(u.id, { can_view_all: e.target.checked })}/>
+                          <Switch checked={!!p.can_view_all} onChange={e => savePerm(u.id, { can_view_all: e.target.checked })}/>
                         </TableCell>
                         <TableCell align="center">
-                          <Switch checked={!!p.can_edit_all}
-                                  onChange={e => savePerm(u.id, { can_edit_all: e.target.checked })}/>
+                          <Switch checked={!!p.can_edit_all} onChange={e => savePerm(u.id, { can_edit_all: e.target.checked })}/>
                         </TableCell>
                         <TableCell align="center">
-                          <Switch checked={!!p.can_edit_dictionaries}
-                                  onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}/>
+                          <Switch checked={!!p.can_edit_dictionaries} onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}/>
                         </TableCell>
                         <TableCell align="center">
                           <Tooltip title="Удалить пользователя">
@@ -252,7 +275,7 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* --- TAB 1: Grants --- */}
+        {/* TAB 1: Grants */}
         {tab === 1 && (
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Точечные доступы</Typography>
@@ -260,11 +283,7 @@ export default function AdminPanel() {
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
               <FormControl sx={{ minWidth: 160 }}>
                 <InputLabel>Resource</InputLabel>
-                <Select
-                  label="Resource"
-                  value={grantForm.resource}
-                  onChange={e => setGrantForm(g => ({ ...g, resource: e.target.value }))}
-                >
+                <Select label="Resource" value={grantForm.resource} onChange={e => setGrantForm(g => ({ ...g, resource: e.target.value }))}>
                   <MenuItem value="trades">trades</MenuItem>
                   <MenuItem value="dividends">dividends</MenuItem>
                   <MenuItem value="dictionaries">dictionaries</MenuItem>
@@ -273,39 +292,23 @@ export default function AdminPanel() {
 
               <FormControl sx={{ minWidth: 260 }}>
                 <InputLabel>Owner (для trades/dividends)</InputLabel>
-                <Select
-                  label="Owner"
-                  value={grantForm.owner_id}
-                  onChange={e => setGrantForm(g => ({ ...g, owner_id: e.target.value }))}
-                >
+                <Select label="Owner" value={grantForm.owner_id} onChange={e => setGrantForm(g => ({ ...g, owner_id: e.target.value }))}>
                   <MenuItem value=""><em>— не задан —</em></MenuItem>
-                  {users.map(u => (
-                    <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
-                  ))}
+                  {users.map(u => (<MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>))}
                 </Select>
               </FormControl>
 
               <FormControl sx={{ minWidth: 260 }}>
                 <InputLabel>Grantee (кому даём)</InputLabel>
-                <Select
-                  label="Grantee"
-                  value={grantForm.grantee_id}
-                  onChange={e => setGrantForm(g => ({ ...g, grantee_id: e.target.value }))}
-                >
+                <Select label="Grantee" value={grantForm.grantee_id} onChange={e => setGrantForm(g => ({ ...g, grantee_id: e.target.value }))}>
                   <MenuItem value=""><em>— выбери пользователя —</em></MenuItem>
-                  {users.map(u => (
-                    <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
-                  ))}
+                  {users.map(u => (<MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>))}
                 </Select>
               </FormControl>
 
               <FormControl sx={{ minWidth: 160 }}>
                 <InputLabel>Mode</InputLabel>
-                <Select
-                  label="Mode"
-                  value={grantForm.mode}
-                  onChange={e => setGrantForm(g => ({ ...g, mode: e.target.value }))}
-                >
+                <Select label="Mode" value={grantForm.mode} onChange={e => setGrantForm(g => ({ ...g, mode: e.target.value }))}>
                   <MenuItem value="read">read</MenuItem>
                   <MenuItem value="write">write</MenuItem>
                 </Select>
@@ -377,7 +380,7 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* --- TAB 2: Справочники и глобальные флаги --- */}
+        {/* TAB 2: Справочники / глобальные флаги */}
         {tab === 2 && (
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Глобальные права (по пользователям)</Typography>
@@ -421,30 +424,17 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* --- TAB 3: Управление пользователями --- */}
+        {/* TAB 3: Управление пользователями */}
         {tab === 3 && (
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Пользователи</Typography>
 
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-              <TextField
-                label="Email"
-                value={newUser.email}
-                onChange={e => setNewUser(s => ({ ...s, email: e.target.value }))}
-              />
-              <TextField
-                label="Пароль"
-                type="password"
-                value={newUser.password}
-                onChange={e => setNewUser(s => ({ ...s, password: e.target.value }))}
-              />
+              <TextField label="Email" value={newUser.email} onChange={e => setNewUser(s => ({ ...s, email: e.target.value }))}/>
+              <TextField label="Пароль" type="password" value={newUser.password} onChange={e => setNewUser(s => ({ ...s, password: e.target.value }))}/>
               <FormControl sx={{ minWidth: 160 }}>
                 <InputLabel>is_admin</InputLabel>
-                <Select
-                  label="is_admin"
-                  value={newUser.is_admin ? 'true' : 'false'}
-                  onChange={e => setNewUser(s => ({ ...s, is_admin: e.target.value === 'true' }))}
-                >
+                <Select label="is_admin" value={newUser.is_admin ? 'true' : 'false'} onChange={e => setNewUser(s => ({ ...s, is_admin: e.target.value === 'true' }))}>
                   <MenuItem value="false">false</MenuItem>
                   <MenuItem value="true">true</MenuItem>
                 </Select>
@@ -459,23 +449,12 @@ export default function AdminPanel() {
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
               <FormControl sx={{ minWidth: 280 }}>
                 <InputLabel>Пользователь</InputLabel>
-                <Select
-                  label="Пользователь"
-                  value={resetPwd.user_id}
-                  onChange={e => setResetPwd(s => ({ ...s, user_id: e.target.value }))}
-                >
+                <Select label="Пользователь" value={resetPwd.user_id} onChange={e => setResetPwd(s => ({ ...s, user_id: e.target.value }))}>
                   <MenuItem value=""><em>— выбери —</em></MenuItem>
-                  {users.map(u => (
-                    <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
-                  ))}
+                  {users.map(u => (<MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>))}
                 </Select>
               </FormControl>
-              <TextField
-                label="Новый пароль"
-                type="password"
-                value={resetPwd.new_password}
-                onChange={e => setResetPwd(s => ({ ...s, new_password: e.target.value }))}
-              />
+              <TextField label="Новый пароль" type="password" value={resetPwd.new_password} onChange={e => setResetPwd(s => ({ ...s, new_password: e.target.value }))}/>
               <Button variant="outlined" startIcon={<KeyIcon />} onClick={resetPassword}>
                 Сменить пароль
               </Button>
@@ -488,7 +467,7 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* --- TAB 4: Аудит --- */}
+        {/* TAB 4: Аудит */}
         {tab === 4 && (
           <Paper sx={{ p: 2 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
@@ -501,11 +480,7 @@ export default function AdminPanel() {
             <Stack direction="row" spacing={2} flexWrap="wrap" sx={{ mb: 2 }}>
               <FormControl sx={{ minWidth: 180 }}>
                 <InputLabel>Таблица</InputLabel>
-                <Select
-                  label="Таблица"
-                  value={auditFilter.table}
-                  onChange={e => setAuditFilter(f => ({ ...f, table: e.target.value }))}
-                >
+                <Select label="Таблица" value={auditFilter.table} onChange={e => setAuditFilter(f => ({ ...f, table: e.target.value }))}>
                   <MenuItem value=""><em>Все</em></MenuItem>
                   <MenuItem value="trades">trades</MenuItem>
                   <MenuItem value="dividends">dividends</MenuItem>
@@ -517,30 +492,14 @@ export default function AdminPanel() {
 
               <FormControl sx={{ minWidth: 280 }}>
                 <InputLabel>User (actor/target)</InputLabel>
-                <Select
-                  label="User"
-                  value={auditFilter.user}
-                  onChange={e => setAuditFilter(f => ({ ...f, user: e.target.value }))}
-                >
+                <Select label="User" value={auditFilter.user} onChange={e => setAuditFilter(f => ({ ...f, user: e.target.value }))}>
                   <MenuItem value=""><em>Все</em></MenuItem>
-                  {users.map(u => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.email || u.id}
-                    </MenuItem>
-                  ))}
+                  {users.map(u => (<MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>))}
                 </Select>
               </FormControl>
 
-              <TextField
-                label="Лимит"
-                type="number"
-                value={auditLimit}
-                onChange={e => setAuditLimit(Number(e.target.value) || 100)}
-                sx={{ width: 120 }}
-              />
-              <Button variant="outlined" startIcon={<ListIcon />} onClick={loadAudit}>
-                Показать
-              </Button>
+              <TextField label="Лимит" type="number" value={auditLimit} onChange={e => setAuditLimit(Number(e.target.value) || 100)} sx={{ width: 120 }} />
+              <Button variant="outlined" startIcon={<ListIcon />} onClick={loadAudit}>Показать</Button>
             </Stack>
 
             <Table size="small">
@@ -594,4 +553,3 @@ export default function AdminPanel() {
     </Box>
   );
 }
-

@@ -1,5 +1,6 @@
 // src/admin/AdminPanel.jsx
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppBar, Toolbar, Typography, Box, Tabs, Tab, Paper,
   Table, TableHead, TableBody, TableRow, TableCell,
@@ -47,7 +48,9 @@ export default function AdminPanel() {
       user_id: userId, can_view_all: false, can_edit_all: false, can_edit_dictionaries: false
     };
   }
-
+  
+  const navigate = useNavigate();
+  
   async function loadAll() {
     try {
       setErr('');
@@ -168,6 +171,9 @@ export default function AdminPanel() {
           <Tooltip title="Обновить">
             <IconButton onClick={loadAll}><RefreshIcon /></IconButton>
           </Tooltip>
+          <Button onClick={() => navigate('/')} sx={{ mr: 1 }} variant="outlined" size="small">
+            На главную
+          </Button>
         </Toolbar>
       </AppBar>
 
@@ -588,3 +594,4 @@ export default function AdminPanel() {
     </Box>
   );
 }
+

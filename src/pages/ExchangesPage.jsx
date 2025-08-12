@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
-  TextField, Table, TableBody, TableCell, TableHead, TableRow, IconButton, Typography
+  TextField, Table, TableBody, TableHead, TableRow, TableCell,
+  IconButton, Typography, TableContainer, Paper
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -62,7 +63,6 @@ export default function ExchangesPage() {
     }
 
     if (editingExchange) {
-      // обновление
       const { error } = await supabase
         .from('exchanges')
         .update(form)
@@ -73,7 +73,6 @@ export default function ExchangesPage() {
         return;
       }
     } else {
-      // добавление
       const { error } = await supabase
         .from('exchanges')
         .insert([form]);
@@ -108,38 +107,44 @@ export default function ExchangesPage() {
         Добавить биржу
       </Button>
 
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Название</TableCell>
-            <TableCell>Код</TableCell>
-            <TableCell>Страна</TableCell>
-            <TableCell>Действия</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {exchanges.map(exchange => (
-            <TableRow key={exchange.exchange_id}>
-              <TableCell>{exchange.name}</TableCell>
-              <TableCell>{exchange.code}</TableCell>
-              <TableCell>{exchange.country}</TableCell>
-              <TableCell>
-                <IconButton onClick={() => handleOpenDialog(exchange)} size="small" color="primary">
-                  <EditIcon />
-                </IconButton>
-                <IconButton onClick={() => handleDelete(exchange.exchange_id)} size="small" color="error">
-                  <DeleteIcon />
-                </IconButton>
-              </TableCell>
+      <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Название</TableCell>
+              <TableCell>Код</TableCell>
+              <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Страна</TableCell>
+              <TableCell>Действия</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {exchanges.map(exchange => (
+              <TableRow key={exchange.exchange_id}>
+                <TableCell>{exchange.name}</TableCell>
+                <TableCell>{exchange.code}</TableCell>
+                <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{exchange.country}</TableCell>
+                <TableCell>
+                  <IconButton onClick={() => handleOpenDialog(exchange)} size="small" color="primary">
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton onClick={() => handleDelete(exchange.exchange_id)} size="small" color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+            {exchanges.length === 0 && (
+              <TableRow><TableCell colSpan={4}>Нет данных</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
+      <Dialog open={openDialog} onClose={handleCloseDialog} fullWidth maxWidth="sm">
         <DialogTitle>{editingExchange ? 'Редактировать биржу' : 'Добавить биржу'}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <TextField
+            fullWidth
             label="Название"
             name="name"
             value={form.name}
@@ -147,6 +152,7 @@ export default function ExchangesPage() {
             required
           />
           <TextField
+            fullWidth
             label="Код"
             name="code"
             value={form.code}
@@ -155,6 +161,7 @@ export default function ExchangesPage() {
             inputProps={{ maxLength: 10 }}
           />
           <TextField
+            fullWidth
             label="Страна"
             name="country"
             value={form.country}
@@ -164,9 +171,7 @@ export default function ExchangesPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Отмена</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingExchange ? 'Сохранить' : 'Добавить'}
-          </Button>
+          <Button onClick={handleSubmit} variant="contained">Сохранить</Button>
         </DialogActions>
       </Dialog>
     </Box>

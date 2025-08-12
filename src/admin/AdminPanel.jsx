@@ -80,7 +80,8 @@ export default function AdminPanel() {
   }
 
   useEffect(() => { loadAll(); }, []);
-  useEffect(() => { if (tab === 4) loadAudit(); }, [tab]);
+  // вкладка "Аудит" теперь индекс 3 (после удаления вкладки)
+  useEffect(() => { if (tab === 3) loadAudit(); }, [tab]);
 
   // --- Оптимистические обновления прав/флагов ---
   async function savePerm(userId, patch) {
@@ -210,7 +211,6 @@ export default function AdminPanel() {
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2 }}>
           <Tab label="Пользователи" />
           <Tab label="Доступы (grants)" />
-          <Tab label="Справочники / Глобальные права" />
           <Tab label="Управление пользователями" />
           <Tab label="Аудит" icon={<ListIcon />} iconPosition="start" />
         </Tabs>
@@ -380,52 +380,8 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* TAB 2: Справочники / глобальные флаги */}
+        {/* TAB 2: Управление пользователями */}
         {tab === 2 && (
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Глобальные права (по пользователям)</Typography>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              <b>Право на словари:</b> включай <code>can_edit_dictionaries</code> или выдай грант
-              <code> resource='dictionaries', owner_id=NULL, mode='write' </code>.
-            </Alert>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Email</TableCell>
-                  <TableCell align="center">is_admin</TableCell>
-                  <TableCell align="center">can_view_all</TableCell>
-                  <TableCell align="center">can_edit_all</TableCell>
-                  <TableCell align="center">can_edit_dictionaries</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {users.map(u => {
-                  const p = getPerm(u.id);
-                  return (
-                    <TableRow key={u.id}>
-                      <TableCell>{u.email || u.id}</TableCell>
-                      <TableCell align="center">
-                        <Switch checked={!!u.is_admin} onChange={e => savePerm(u.id, { is_admin: e.target.checked })}/>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Switch checked={!!p.can_view_all} onChange={e => savePerm(u.id, { can_view_all: e.target.checked })}/>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Switch checked={!!p.can_edit_all} onChange={e => savePerm(u.id, { can_edit_all: e.target.checked })}/>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Switch checked={!!p.can_edit_dictionaries} onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}/>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Paper>
-        )}
-
-        {/* TAB 3: Управление пользователями */}
-        {tab === 3 && (
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" sx={{ mb: 2 }}>Пользователи</Typography>
 
@@ -467,8 +423,8 @@ export default function AdminPanel() {
           </Paper>
         )}
 
-        {/* TAB 4: Аудит */}
-        {tab === 4 && (
+        {/* TAB 3: Аудит */}
+        {tab === 3 && (
           <Paper sx={{ p: 2 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
               <Typography variant="h6">Аудит действий</Typography>

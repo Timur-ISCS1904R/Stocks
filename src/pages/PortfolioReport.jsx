@@ -1,26 +1,14 @@
-// src/pages/PortfolioReport.jsx
+// тот же файл, что мы вернули ранее, плюс поддержка props.filterUserId
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import {
-  Box,
-  Typography,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Paper,
-  CircularProgress,
+  Box, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
+  Table, TableHead, TableBody, TableRow, TableCell, Paper, CircularProgress,
 } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
-export default function PortfolioReport() {
+export default function PortfolioReport({ filterUserId = null }) {
   const [trades, setTrades] = useState([]);
   const [dividends, setDividends] = useState([]);
   const [stocksMap, setStocksMap] = useState({});
@@ -36,13 +24,10 @@ export default function PortfolioReport() {
       const { data, error } = await supabase
         .from('stocks')
         .select('stock_id, ticker, exchange_id, exchange:exchanges(currency:currencies(symbol))');
-      if (error) return console.error('Ошибка загрузки акций', error);
+      if (error) { console.error('Ошибка загрузки акций', error); return; }
       const map = {};
-      data.forEach((s) => {
-        map[s.stock_id] = {
-          ticker: s.ticker,
-          currency_symbol: s.exchange?.currency?.symbol || '₸',
-        };
+      (data || []).forEach((s) => {
+        map[s.stock_id] = { ticker: s.ticker, currency_symbol: s.exchange?.currency?.symbol || '₸' };
       });
       setStocksMap(map);
     }
@@ -55,13 +40,15 @@ export default function PortfolioReport() {
       let tradesQuery = supabase.from('trades').select('*').order('trade_date', { ascending: false });
       if (dateFrom) tradesQuery = tradesQuery.gte('trade_date', dateFrom);
       if (dateTo) tradesQuery = tradesQuery.lte('trade_date', dateTo);
+      if (filterUserId) tradesQuery = tradesQuery.eq('user_id', filterUserId);
+
       let dividendsQuery = supabase.from('dividends').select('*').order('payment_date', { ascending: false });
       if (dateFrom) dividendsQuery = dividendsQuery.gte('payment_date', dateFrom);
       if (dateTo) dividendsQuery = dividendsQuery.lte('payment_date', dateTo);
+      if (filterUserId) dividendsQuery = dividendsQuery.eq('user_id', filterUserId);
 
       const [{ data: tradesData, error: tradesError }, { data: divData, error: divError }] = await Promise.all([
-        tradesQuery,
-        dividendsQuery,
+        tradesQuery, dividendsQuery,
       ]);
 
       if (tradesError || divError) {
@@ -70,23 +57,11 @@ export default function PortfolioReport() {
         return;
       }
 
-      const tradesWithTicker = (tradesData || []).map(t => ({
-        ...t,
-        ticker: stocksMap[t.stock_id]?.ticker || '—',
-      }));
+      const tradesWithTicker = (tradesData || []).map(t => ({ ...t, ticker: stocksMap[t.stock_id]?.ticker || '—' }));
+      const dividendsWithTicker = (divData || []).map(d => ({ ...d, ticker: stocksMap[d.stock_id]?.ticker || '—' }));
 
-      const dividendsWithTicker = (divData || []).map(d => ({
-        ...d,
-        ticker: stocksMap[d.stock_id]?.ticker || '—',
-      }));
-
-      const filteredTrades = selectedTicker
-        ? tradesWithTicker.filter(t => t.ticker === selectedTicker)
-        : tradesWithTicker;
-
-      const filteredDividends = selectedTicker
-        ? dividendsWithTicker.filter(d => d.ticker === selectedTicker)
-        : dividendsWithTicker;
+      const filteredTrades = selectedTicker ? tradesWithTicker.filter(t => t.ticker === selectedTicker) : tradesWithTicker;
+      const filteredDividends = selectedTicker ? dividendsWithTicker.filter(d => d.ticker === selectedTicker) : dividendsWithTicker;
 
       setTrades(filteredTrades);
       setDividends(filteredDividends);
@@ -100,15 +75,14 @@ export default function PortfolioReport() {
       setLoading(false);
     }
     fetchData();
-  }, [dateFrom, dateTo, selectedTicker, stocksMap]);
+  }, [dateFrom, dateTo, selectedTicker, stocksMap, filterUserId]);
 
-  function formatAmount(value) {
-    return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function formatAmount(v) {
+    return v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-
   const getCurrencyByTicker = (ticker) => {
-    const stockEntry = Object.values(stocksMap).find(s => s.ticker === ticker);
-    return stockEntry?.currency_symbol || '₸';
+    const s = Object.values(stocksMap).find(x => x.ticker === ticker);
+    return s?.currency_symbol || '₸';
   };
 
   const avgBuyPrice = (ticker) => {
@@ -120,48 +94,45 @@ export default function PortfolioReport() {
   };
 
   const portfolioValueByAvgPriceByCurrency = () => {
-    const positions = {};
+    const pos = {};
     trades.forEach(t => {
       if (!t.ticker) return;
-      const tk = t.ticker;
-      positions[tk] = (positions[tk] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
+      pos[t.ticker] = (pos[t.ticker] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
     });
-    const valueByCurrency = {};
-    for (const [ticker, qty] of Object.entries(positions)) {
+    const map = {};
+    for (const [ticker, qty] of Object.entries(pos)) {
       if (qty <= 0) continue;
       const avgPrice = avgBuyPrice(ticker);
       const currency = getCurrencyByTicker(ticker);
-      valueByCurrency[currency] = (valueByCurrency[currency] || 0) + avgPrice * qty;
+      map[currency] = (map[currency] || 0) + avgPrice * qty;
     }
-    return valueByCurrency;
+    return map;
   };
 
   const portfolioValueByActualPriceByCurrency = () => {
-    const positions = {};
+    const pos = {};
     trades.forEach(t => {
       if (!t.ticker) return;
-      const tk = t.ticker;
-      positions[tk] = (positions[tk] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
+      pos[t.ticker] = (pos[t.ticker] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
     });
-    const valueByCurrency = {};
-    for (const [ticker, qty] of Object.entries(positions)) {
+    const map = {};
+    for (const [ticker, qty] of Object.entries(pos)) {
       if (qty <= 0) continue;
       const actualPrice = actualPrices[ticker] || avgBuyPrice(ticker);
       const currency = getCurrencyByTicker(ticker);
-      valueByCurrency[currency] = (valueByCurrency[currency] || 0) + actualPrice * qty;
+      map[currency] = (map[currency] || 0) + actualPrice * qty;
     }
-    return valueByCurrency;
+    return map;
   };
 
   const portfolioProfitByCurrency = () => {
     const profitMap = {};
-    const positions = {};
+    const pos = {};
     trades.forEach(t => {
       if (!t.ticker) return;
-      const tk = t.ticker;
-      positions[tk] = (positions[tk] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
+      pos[t.ticker] = (pos[t.ticker] || 0) + (t.trade_type === 'BUY' ? t.quantity : -t.quantity);
     });
-    for (const [ticker, qty] of Object.entries(positions)) {
+    for (const [ticker, qty] of Object.entries(pos)) {
       if (qty <= 0) continue;
       const avgPrice = avgBuyPrice(ticker);
       const actualPrice = actualPrices[ticker] || avgPrice;
@@ -174,31 +145,29 @@ export default function PortfolioReport() {
 
   const profitByCurrency = () => {
     const profitMap = {};
-    const avgPrices = {};
-    tickers.forEach(ticker => (avgPrices[ticker] = avgBuyPrice(ticker)));
+    const avg = {};
+    tickers.forEach(t => (avg[t] = avgBuyPrice(t)));
     const sales = trades.filter(t => t.trade_type === 'SELL');
     sales.forEach(sell => {
       const tk = sell.ticker;
       if (!tk) return;
-      const avgPrice = avgPrices[tk] || 0;
       const sellAmount = sell.price_per_share * sell.quantity;
-      const buyCost = avgPrice * sell.quantity;
-      const profit = sellAmount - buyCost;
+      const buyCost = (avg[tk] || 0) * sell.quantity;
       const currency = getCurrencyByTicker(tk);
-      profitMap[currency] = (profitMap[currency] || 0) + profit;
+      profitMap[currency] = (profitMap[currency] || 0) + (sellAmount - buyCost);
     });
     return profitMap;
   };
 
   const dividendsByCurrency = () => {
-    const divMap = {};
+    const map = {};
     dividends.forEach(d => {
       if (selectedTicker && d.ticker !== selectedTicker) return;
       const currency = getCurrencyByTicker(d.ticker);
       const amount = d.amount_per_share * d.quantity;
-      divMap[currency] = (divMap[currency] || 0) + amount;
+      map[currency] = (map[currency] || 0) + amount;
     });
-    return divMap;
+    return map;
   };
 
   const handleActualPriceChange = (ticker, value) => {
@@ -206,31 +175,32 @@ export default function PortfolioReport() {
   };
 
   const profitByTicker = (() => {
-    const result = {};
-    const avgPrices = {};
-    tickers.forEach(ticker => (avgPrices[ticker] = avgBuyPrice(ticker)));
+    const res = {};
+    const avg = {};
+    tickers.forEach(t => (avg[t] = avgBuyPrice(t)));
     const sales = trades.filter(t => t.trade_type === 'SELL');
     sales.forEach(sell => {
       const tk = sell.ticker;
       if (!tk) return;
       const sellAmount = sell.price_per_share * sell.quantity;
-      const buyCost = (avgPrices[tk] || 0) * sell.quantity;
-      if (!result[tk]) result[tk] = 0;
-      result[tk] += sellAmount - buyCost;
+      const buyCost = (avg[tk] || 0) * sell.quantity;
+      if (!res[tk]) res[tk] = 0;
+      res[tk] += sellAmount - buyCost;
     });
-    return result;
+    return res;
   })();
 
   const soldTickers = () => {
     const sells = trades.filter(t => t.trade_type === 'SELL');
-    const unique = [...new Set(sells.map(s => s.ticker).filter(t => t !== '—'))];
-    return unique;
+    return [...new Set(sells.map(s => s.ticker).filter(t => t !== '—'))];
   };
 
   const dividendTickers = () => {
-    const unique = [...new Set(dividends.map(d => d.ticker).filter(t => t !== '—'))];
-    return unique;
+    return [...new Set(dividends.map(d => d.ticker).filter(t => t !== '—'))];
   };
+
+  // UI (тот же, только без изменений логики)
+
 
   return (
     <Box sx={{ px: { xs: 1, sm: 2 }, py: { xs: 2, sm: 4 }, maxWidth: 900, mx: 'auto' }}>

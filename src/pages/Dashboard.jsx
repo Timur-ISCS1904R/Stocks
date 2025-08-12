@@ -15,27 +15,26 @@ export default function Dashboard({ session }) {
   const navigate = useNavigate();
 
   async function signOut() {
-     try {
-    // Пытаемся сделать глобальный выход (отзывает refresh-токены везде)
-       const { error } = await supabase.auth.signOut({ scope: 'global' });
+    try {
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
 
     // Если сессии уже нет — это не ошибка, просто продолжаем
        if (error && error.message !== 'session_not_found') {
       // Если другая ошибка — пробуем локальный логаут
        await supabase.auth.signOut({ scope: 'local' });
       }
-     } catch {
+    } catch {
     // Если что-то пошло не так, пробуем локальный логаут
-       await supabase.auth.signOut({ scope: 'local' });
-     } finally {
+      await supabase.auth.signOut({ scope: 'local' });
+    } finally {
     // На всякий случай чистим локальный токен из localStorage
-       try {
-         const keyPrefix = 'sb-' + btoa(process.env.REACT_APP_SUPABASE_URL || '').replace(/=+$/, '') + '-auth-token';
-         localStorage.removeItem(keyPrefix);
-       } catch {}
+      try {
+        const keyPrefix = 'sb-' + btoa(process.env.REACT_APP_SUPABASE_URL || '').replace(/=+$/, '') + '-auth-token';
+        localStorage.removeItem(keyPrefix);
+      } catch {}
     // Перенаправляем на страницу логина
-       window.location.href = '/';
-   }
+      window.location.href = '/';
+    }
   }
 
   return (

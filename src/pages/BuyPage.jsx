@@ -3,7 +3,8 @@ import { supabase } from '../supabaseClient';
 
 import {
   Box, TextField, Button, Select, MenuItem, InputLabel, FormControl, Table,
-  TableBody, TableCell, TableHead, TableRow, IconButton, Stack
+  TableBody, TableCell, TableHead, TableRow, IconButton, Stack,
+  Grid, TableContainer, Paper
 } from '@mui/material';
 
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -30,7 +31,7 @@ const formatDateToYYYYMMDD = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function BuyPage({ filterUserId = null }) {
+export default function BuyPage() {
   const [exchanges, setExchanges] = useState([]);
   const [allStocks, setAllStocks] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -54,20 +55,20 @@ export default function BuyPage({ filterUserId = null }) {
 
   useEffect(() => {
     async function fetchExchanges() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('exchanges')
         .select('exchange_id, name, currency:currencies(symbol)');
-      setExchanges(data || []);
+      if (!error) setExchanges(data);
     }
     fetchExchanges();
   }, []);
 
   useEffect(() => {
     async function fetchAllStocks() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('stocks')
         .select('stock_id, ticker, exchange_id');
-      setAllStocks(data || []);
+      if (!error) setAllStocks(data);
     }
     fetchAllStocks();
   }, []);
@@ -83,19 +84,18 @@ export default function BuyPage({ filterUserId = null }) {
 
   useEffect(() => {
     async function fetchTrades() {
-      let q = supabase.from('trades')
+      const { data, error } = await supabase
+        .from('trades')
         .select('*')
         .eq('trade_type', 'BUY')
         .order('trade_date', { ascending: false });
-      if (filterUserId) q = q.eq('user_id', filterUserId);
-      const { data, error } = await q;
       if (!error) {
-        setTrades(data || []);
-        setFilteredTrades(data || []);
+        setTrades(data);
+        setFilteredTrades(data);
       }
     }
     fetchTrades();
-  }, [filterUserId]);
+  }, []);
 
   // Обновление фильтрации
   useEffect(() => {
@@ -188,140 +188,167 @@ export default function BuyPage({ filterUserId = null }) {
 
   return (
     <Box>
-      <form onSubmit={handleSubmit} style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Биржа</InputLabel>
-          <Select
-            value={selectedExchange ? selectedExchange.exchange_id : ''}
-            label="Биржа"
-            onChange={e => {
-              const ex = exchanges.find(x => x.exchange_id === e.target.value);
-              setSelectedExchange(ex || null);
-              setForm(prev => ({ ...prev, ticker: '' }));
-            }}
-            required
-          >
-            <MenuItem value=""><em>Выберите</em></MenuItem>
-            {exchanges.map(ex => (
-              <MenuItem key={ex.exchange_id} value={ex.exchange_id}>{ex.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={6} md="auto">
+            <FormControl fullWidth sx={{ minWidth: { md: 150 } }}>
+              <InputLabel>Биржа</InputLabel>
+              <Select
+                value={selectedExchange ? selectedExchange.exchange_id : ''}
+                label="Биржа"
+                onChange={e => {
+                  const ex = exchanges.find(x => x.exchange_id === e.target.value);
+                  setSelectedExchange(ex || null);
+                  setForm(prev => ({ ...prev, ticker: '' }));
+                }}
+                required
+              >
+                <MenuItem value=""><em>Выберите</em></MenuItem>
+                {exchanges.map(ex => (
+                  <MenuItem key={ex.exchange_id} value={ex.exchange_id}>{ex.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Тикер</InputLabel>
-          <Select
-            value={form.ticker}
-            label="Тикер"
-            onChange={handleChange}
-            name="ticker"
-            required
-            disabled={!selectedExchange}
-          >
-            <MenuItem value=""><em>Выберите</em></MenuItem>
-            {stocks.map(stock => (
-              <MenuItem key={stock.stock_id} value={stock.ticker}>{stock.ticker}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+          <Grid item xs={12} sm={6} md="auto">
+            <FormControl fullWidth sx={{ minWidth: { md: 150 } }}>
+              <InputLabel>Тикер</InputLabel>
+              <Select
+                value={form.ticker}
+                label="Тикер"
+                onChange={handleChange}
+                name="ticker"
+                required
+                disabled={!selectedExchange}
+              >
+                <MenuItem value=""><em>Выберите</em></MenuItem>
+                {stocks.map(stock => (
+                  <MenuItem key={stock.stock_id} value={stock.ticker}>{stock.ticker}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-        <TextField
-          label="Цена"
-          name="price"
-          value={form.price}
-          onChange={handleChange}
-          type="number"
-          inputProps={{ step: "0.0001" }}
-          required
-          sx={{ width: 120 }}
-        />
+          <Grid item xs={6} sm={4} md="auto">
+            <TextField
+              fullWidth
+              label="Цена"
+              name="price"
+              value={form.price}
+              onChange={handleChange}
+              type="number"
+              inputProps={{ step: "0.0001" }}
+              required
+            />
+          </Grid>
 
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
-          <DatePicker
-            label="Дата"
-            value={dateValue}
-            onChange={(newValue) => {
-              setDateValue(newValue);
-              const formattedDate = formatDateToYYYYMMDD(newValue);
-              setForm(prev => ({ ...prev, date: formattedDate }));
-            }}
-            renderInput={(params) => (
-              <TextField {...params} required sx={{ width: 160 }} />
-            )}
-          />
-        </LocalizationProvider>
+          <Grid item xs={6} sm={4} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата"
+                value={dateValue}
+                onChange={(newValue) => {
+                  setDateValue(newValue);
+                  const formattedDate = formatDateToYYYYMMDD(newValue);
+                  setForm(prev => ({ ...prev, date: formattedDate }));
+                }}
+                renderInput={(params) => (
+                  <TextField {...params} required fullWidth />
+                )}
+              />
+            </LocalizationProvider>
+          </Grid>
 
-        <TextField
-          label="Количество"
-          name="quantity"
-          value={form.quantity}
-          onChange={handleChange}
-          type="number"
-          required
-          sx={{ width: 120 }}
-        />
+          <Grid item xs={6} sm={4} md="auto">
+            <TextField
+              fullWidth
+              label="Количество"
+              name="quantity"
+              value={form.quantity}
+              onChange={handleChange}
+              type="number"
+              required
+            />
+          </Grid>
 
-        <Button variant="contained" type="submit" sx={{ alignSelf: 'center' }}>Добавить</Button>
+          <Grid item xs={12} sm="auto">
+            <Button variant="contained" type="submit" fullWidth sx={{ height: '100%' }}>Добавить</Button>
+          </Grid>
+        </Grid>
       </form>
 
       {/* Фильтры */}
       <Box sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
-          <TextField
-            label="Фильтр по тикеру"
-            value={filterTicker}
-            onChange={e => setFilterTicker(e.target.value)}
-            sx={{ minWidth: 150 }}
-          />
-          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
-            <DatePicker
-              label="Дата с"
-              value={filterDateFrom}
-              onChange={setFilterDateFrom}
-              renderInput={(params) => <TextField {...params} sx={{ width: 140 }} />}
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              label="Фильтр по тикеру"
+              value={filterTicker}
+              onChange={e => setFilterTicker(e.target.value)}
             />
-            <DatePicker
-              label="Дата по"
-              value={filterDateTo}
-              onChange={setFilterDateTo}
-              renderInput={(params) => <TextField {...params} sx={{ width: 140 }} />}
-            />
-          </LocalizationProvider>
-        </Stack>
+          </Grid>
+          <Grid item xs={6} sm={3} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата с"
+                value={filterDateFrom}
+                onChange={setFilterDateFrom}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </LocalizationProvider>
+          </Grid>
+          <Grid item xs={6} sm={3} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата по"
+                value={filterDateTo}
+                onChange={setFilterDateTo}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </LocalizationProvider>
+          </Grid>
+        </Grid>
       </Box>
 
-      {/* Таблица */}
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Дата</TableCell>
-            <TableCell>Тикер</TableCell>
-            <TableCell align="right">Цена</TableCell>
-            <TableCell align="right">Кол-во</TableCell>
-            <TableCell align="right">Сумма</TableCell>
-            <TableCell align="center">Действия</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {filteredTrades.map(trade => {
-            const stock = allStocks.find(s => s.stock_id === trade.stock_id);
-            return (
-              <TableRow key={trade.trade_id}>
-                <TableCell>{trade.trade_date}</TableCell>
-                <TableCell>{stock?.ticker || trade.stock_id}</TableCell>
-                <TableCell align="right">{trade.price_per_share}</TableCell>
-                <TableCell align="right">{trade.quantity}</TableCell>
-                <TableCell align="right">{trade.total_amount}</TableCell>
-                <TableCell align="center">
-                  <IconButton size="small" color="error" onClick={() => handleDelete(trade.trade_id)}>
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Дата</TableCell>
+              <TableCell>Тикер</TableCell>
+              <TableCell align="right">Цена</TableCell>
+              <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Кол-во</TableCell>
+              <TableCell align="right">Сумма</TableCell>
+              <TableCell align="center">Действия</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredTrades.map(trade => {
+              const stock = allStocks.find(s => s.stock_id === trade.stock_id);
+              const currency = exchanges.find(e => e.exchange_id === (stock?.exchange_id))?.currency?.symbol || '';
+              return (
+                <TableRow key={trade.trade_id}>
+                  <TableCell>{trade.trade_date}</TableCell>
+                  <TableCell>{stock?.ticker || '—'}</TableCell>
+                  <TableCell align="right">{formatCurrency(trade.price_per_share, currency)}</TableCell>
+                  <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{trade.quantity}</TableCell>
+                  <TableCell align="right">{formatCurrency(trade.total_amount, currency)}</TableCell>
+                  <TableCell align="center">
+                    <IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {filteredTrades.length === 0 && (
+              <TableRow><TableCell colSpan={6}>Нет покупок</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </Box>
   );
 }

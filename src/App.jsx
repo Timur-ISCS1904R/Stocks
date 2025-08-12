@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AdminPanel from './admin/AdminPanel';
 
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
@@ -40,6 +41,7 @@ function App() {
       <Routes>
         <Route path="/*" element={<Dashboard session={session} />} />
         <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   );

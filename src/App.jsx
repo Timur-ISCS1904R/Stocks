@@ -43,15 +43,6 @@ export default function App() {
       <Routes>
         {/* главная (у тебя внутри Dashboard уже есть вкладки) */}
         <Route path="/" element={<Dashboard session={session} />} />
-
-        {/* прямые маршруты на страницы из /pages при необходимости */}
-        <Route path="/buy" element={<BuyPage />} />
-        <Route path="/sell" element={<SellPage />} />
-        <Route path="/dividends" element={<DividendsPage />} />
-        <Route path="/stocks" element={<StocksPage />} />
-        <Route path="/exchanges" element={<ExchangesPage />} />
-        <Route path="/report" element={<PortfolioReport />} />
-
         {/* админка — важна позиция до catch-all */}
         <Route path="/admin" element={<AdminPanel />} />
 

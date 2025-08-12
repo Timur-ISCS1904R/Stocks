@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import AdminPanel from './admin/AdminPanel';
 import Logout from './pages/Logout';
+import AccountPasswordPage from './pages/AccountPasswordPage';
 
 import { Box, Paper, TextField, Button, Typography, Alert } from '@mui/material';
 
@@ -145,10 +146,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard session={session} />} />
         <Route path="/admin" element={<AdminPanel />} />
-        <Route
-          path="/account/password"
-          element={<ChangePasswordPage onDone={() => (window.location.href = '/')} />}
-        />
+        <Route path="/account/password" element={<AccountPasswordPage />} />
         <Route path="/logout" element={<Logout />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

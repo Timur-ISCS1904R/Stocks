@@ -6,7 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 const app = express();
 app.use(express.json());
 
-// CORS
 app.use(
   cors({
     origin: process.env.FRONTEND_ORIGIN?.split(',') ?? '*',
@@ -14,14 +13,12 @@ app.use(
   })
 );
 
-// Supabase admin client
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-// --- middleware: только админ ---
 async function requireAdmin(req, res, next) {
   try {
     const auth = req.headers.authorization || '';
@@ -50,7 +47,6 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-// --- middleware: просто аутентифицированный ---
 async function requireAuth(req, res, next) {
   try {
     const auth = req.headers.authorization || '';
@@ -68,8 +64,14 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// ------------- USERS (Auth Admin API) -------------
+// helpers
+async function getAuthEmailById(user_id) {
+  const { data, error } = await supabase.auth.admin.getUserById(user_id);
+  if (error) return null;
+  return data?.user?.email || null;
+}
 
+// ---------- USERS ----------
 app.get('/api/users', requireAdmin, async (req, res) => {
   try {
     const { data, error } = await supabase.auth.admin.listUsers();
@@ -116,7 +118,7 @@ app.post('/api/admin/users/create', requireAdmin, async (req, res) => {
         user_id: uid,
         email,
         is_admin,
-        must_change_password: true // <-- обязательно сменить пароль при первом входе
+        must_change_password: true
       });
       if (upErr) return res.status(500).json({ error: upErr.message });
     }
@@ -148,7 +150,7 @@ app.post('/api/admin/users/reset-password', requireAdmin, async (req, res) => {
     const { user_id, new_password } = req.body;
     if (!user_id || !new_password) return res.status(400).json({ error: 'user_id & new_password required' });
 
-    const { data, error } = await supabase.auth.admin.updateUserById(user_id, { password: new_password });
+    const { error } = await supabase.auth.admin.updateUserById(user_id, { password: new_password });
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true });
   } catch (e) {
@@ -157,8 +159,7 @@ app.post('/api/admin/users/reset-password', requireAdmin, async (req, res) => {
   }
 });
 
-// ------------- GLOBAL PERMISSIONS -------------
-
+// ---------- GLOBAL PERMISSIONS ----------
 app.get('/api/permissions', requireAdmin, async (req, res) => {
   try {
     const [perms, grants, admins] = await Promise.all([
@@ -186,15 +187,35 @@ app.post('/api/permissions', requireAdmin, async (req, res) => {
     const { user_id, can_view_all = false, can_edit_all = false, can_edit_dictionaries = false, is_admin = false } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
+    // upsert user_permissions
     const { error: e1 } = await supabase
       .from('user_permissions')
       .upsert({ user_id, can_view_all, can_edit_all, can_edit_dictionaries });
     if (e1) return res.status(500).json({ error: e1.message });
 
-    const { error: e2 } = await supabase
+    // users: сначала проверим, есть ли строка
+    const { data: existing, error: selErr } = await supabase
       .from('users')
-      .upsert({ user_id, is_admin });
-    if (e2) return res.status(500).json({ error: e2.message });
+      .select('user_id, email')
+      .eq('user_id', user_id)
+      .maybeSingle();
+    if (selErr) return res.status(500).json({ error: selErr.message });
+
+    if (existing) {
+      const { error: updErr } = await supabase
+        .from('users')
+        .update({ is_admin })
+        .eq('user_id', user_id);
+      if (updErr) return res.status(500).json({ error: updErr.message });
+    } else {
+      // нужен email (NOT NULL). Берём из Auth.
+      const email = await getAuthEmailById(user_id);
+      if (!email) return res.status(500).json({ error: 'email not found for user' });
+      const { error: insErr } = await supabase
+        .from('users')
+        .insert({ user_id, email, is_admin });
+      if (insErr) return res.status(500).json({ error: insErr.message });
+    }
 
     res.json({ ok: true });
   } catch (e) {
@@ -203,8 +224,7 @@ app.post('/api/permissions', requireAdmin, async (req, res) => {
   }
 });
 
-// ------------- USER GRANTS -------------
-
+// ---------- USER GRANTS ----------
 app.post('/api/grant', requireAdmin, async (req, res) => {
   try {
     const { resource, owner_id = null, grantee_id, mode } = req.body;
@@ -245,8 +265,7 @@ app.delete('/api/grant', requireAdmin, async (req, res) => {
   }
 });
 
-// ------------- AUDIT -------------
-
+// ---------- AUDIT ----------
 app.get('/api/audit', requireAdmin, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit || '200', 10), 1000);
@@ -264,8 +283,7 @@ app.get('/api/audit', requireAdmin, async (req, res) => {
   }
 });
 
-// ------------- SELF -------------
-
+// ---------- SELF ----------
 app.post('/api/self/complete-first-login', requireAuth, async (req, res) => {
   try {
     const uid = req.user.id;

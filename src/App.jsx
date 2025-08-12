@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import AdminPanel from './admin/AdminPanel';
+import Logout from './pages/Logout';
 
 import { Box, Paper, TextField, Button, Typography, Alert } from '@mui/material';
 
@@ -148,6 +149,7 @@ export default function App() {
           path="/account/password"
           element={<ChangePasswordPage onDone={() => (window.location.href = '/')} />}
         />
+        <Route path="/logout" element={<Logout />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

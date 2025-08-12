@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Box, Tabs, Tab, Button, Typography, AppBar, Toolbar } from '@mui/material';
+import { Box, Tabs, Tab, Button, Typography, AppBar, Toolbar, Stack } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 
 import BuyPage from './BuyPage';
 import SellPage from './SellPage';
 import DividendsPage from './DividendsPage';
 import StocksPage from './StocksPage';
 import ExchangesPage from './ExchangesPage';
-import PortfolioReport from './PortfolioReport';  // импортируем новый компонент
+import PortfolioReport from './PortfolioReport';
 
 export default function Dashboard({ session }) {
   const [tab, setTab] = useState(0);
+  const navigate = useNavigate();
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -23,7 +25,13 @@ export default function Dashboard({ session }) {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Акции и сделки
           </Typography>
-          <Button color="inherit" onClick={signOut}>Выйти</Button>
+
+          <Stack direction="row" spacing={1}>
+            <Button color="inherit" onClick={() => navigate('/account/password')}>
+              Сменить пароль
+            </Button>
+            <Button color="inherit" onClick={signOut}>Выйти</Button>
+          </Stack>
         </Toolbar>
       </AppBar>
 
@@ -39,7 +47,7 @@ export default function Dashboard({ session }) {
           <Tab label="Дивиденды" />
           <Tab label="Справочник акций" />
           <Tab label="Справочник бирж" />
-          <Tab label="Отчёт по портфелю" />  {/* Новая вкладка */}
+          <Tab label="Отчёт по портфелю" />
         </Tabs>
 
         <Box sx={{ p: 2 }}>
@@ -48,7 +56,7 @@ export default function Dashboard({ session }) {
           {tab === 2 && <DividendsPage />}
           {tab === 3 && <StocksPage />}
           {tab === 4 && <ExchangesPage />}
-          {tab === 5 && <PortfolioReport />}  {/* Отчёт по портфелю */}
+          {tab === 5 && <PortfolioReport />}
         </Box>
       </Box>
     </>

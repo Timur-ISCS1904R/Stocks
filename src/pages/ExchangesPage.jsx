@@ -8,7 +8,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { supabase } from '../supabaseClient';
 
-export default function ExchangesPage() {
+export default function ExchangesPage({ readOnlyDicts = false }) {
   const [exchanges, setExchanges] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -103,7 +103,7 @@ export default function ExchangesPage() {
     <Box>
       <Typography variant="h6" mb={2}>Справочник бирж</Typography>
 
-      <Button variant="contained" onClick={() => handleOpenDialog()} sx={{ mb: 2 }}>
+      <Button variant="contained" onClick={() => handleOpenDialog()} disabled={readOnlyDicts} sx={{ mb: 2 }}>
         Добавить биржу
       </Button>
 
@@ -124,7 +124,16 @@ export default function ExchangesPage() {
                 <TableCell>{exchange.code}</TableCell>
                 <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{exchange.country}</TableCell>
                 <TableCell>
-                  <IconButton onClick={() => handleOpenDialog(exchange)} size="small" color="primary">
+                  {!readOnlyDicts && (
+                      <>
+                        <IconButton onClick={() => onEdit(row)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton onClick={() => onDelete(row.stock_id)} size="small" color="error">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                     <EditIcon />
                   </IconButton>
                   <IconButton onClick={() => handleDelete(exchange.exchange_id)} size="small" color="error">

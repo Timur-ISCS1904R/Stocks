@@ -42,15 +42,15 @@ export default function Dashboard({ session }) {
         .eq('user_id', meId)
         .maybeSingle();
       setCurrentProfile(me || null);
+      setIsAdmin(!!me?.is_admin);
       // после загрузки me (текущий пользователь)
       const { data: perms } = await supabase
         .from('user_permissions')
-        .select('is_admin, can_edit_all, can_edit_dictionaries')
+        .select('can_edit_all, can_edit_dictionaries')
         .eq('user_id', meId)
         .maybeSingle();
 
       // если в таблице нет каких-то полей — JS-значения будут false
-      setIsAdmin(!!perms?.is_admin);
       setCanEditAll(!!perms?.can_edit_all);
       setCanEditDictionaries(!!perms?.can_edit_dictionaries);
       // список всех пользователей (для подписей вкладок и для админа)

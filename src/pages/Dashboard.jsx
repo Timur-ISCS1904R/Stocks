@@ -13,6 +13,9 @@ import PortfolioReport from './PortfolioReport';
 export default function Dashboard({ session }) {
   const [tab, setTab] = useState(0);
   const [userTab, setUserTab] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [canEditAll, setCanEditAll] = useState(false);
+  const [canEditDictionaries, setCanEditDictionaries] = useState(false);
   // при смене пользователя (верхние вкладки) сбрасываем нижнюю вкладку на первую
   useEffect(() => {
     setTab(0);
@@ -39,7 +42,17 @@ export default function Dashboard({ session }) {
         .eq('user_id', meId)
         .maybeSingle();
       setCurrentProfile(me || null);
+      // после загрузки me (текущий пользователь)
+      const { data: perms } = await supabase
+        .from('user_permissions')
+        .select('is_admin, can_edit_all, can_edit_dictionaries')
+        .eq('user_id', meId)
+        .maybeSingle();
 
+      // если в таблице нет каких-то полей — JS-значения будут false
+      setIsAdmin(!!perms?.is_admin);
+      setCanEditAll(!!perms?.can_edit_all);
+      setCanEditDictionaries(!!perms?.can_edit_dictionaries);
       // список всех пользователей (для подписей вкладок и для админа)
       const { data: all } = await supabase
         .from('users')
@@ -108,8 +121,8 @@ export default function Dashboard({ session }) {
     { key: 'buy',        label: 'Покупка',           render: (uid, ro) => <BuyPage filterUserId={uid} readOnly={ro} /> },
     { key: 'sell',       label: 'Продажа',           render: (uid, ro) => <SellPage filterUserId={uid} readOnly={ro} /> },
     { key: 'dividends',  label: 'Дивиденды',         render: (uid, ro) => <DividendsPage filterUserId={uid} readOnly={ro} /> },
-    { key: 'stocks',     label: 'Справочник акций',  render: ()   => <StocksPage /> },
-    { key: 'exchanges',  label: 'Справочник бирж',   render: ()   => <ExchangesPage /> },
+    { key: 'stocks',     label: 'Справочник акций',  render: ()   => <StocksPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries) /> },
+    { key: 'exchanges',  label: 'Справочник бирж',   render: ()   => <ExchangesPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries) /> },
     { key: 'report',     label: 'Отчёт по портфелю', render: (uid, ro) => <PortfolioReport filterUserId={uid} /> },
   ];
 

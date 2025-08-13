@@ -13,6 +13,10 @@ import PortfolioReport from './PortfolioReport';
 export default function Dashboard({ session }) {
   const [tab, setTab] = useState(0);
   const [userTab, setUserTab] = useState(0);
+  // при смене пользователя (верхние вкладки) сбрасываем нижнюю вкладку на первую
+  useEffect(() => {
+    setTab(0);
+  }, [userTab]);
 
   const [users, setUsers] = useState([]);
   const [currentProfile, setCurrentProfile] = useState(null);

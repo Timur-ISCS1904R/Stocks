@@ -120,8 +120,8 @@ export default function Dashboard({ session }) {
     { key: 'buy',        label: 'Покупка',           render: (uid, ro) => <BuyPage filterUserId={uid} readOnly={ro} /> },
     { key: 'sell',       label: 'Продажа',           render: (uid, ro) => <SellPage filterUserId={uid} readOnly={ro} /> },
     { key: 'dividends',  label: 'Дивиденды',         render: (uid, ro) => <DividendsPage filterUserId={uid} readOnly={ro} /> },
-    { key: 'stocks',     label: 'Справочник акций',  render: ()   => (<StocksPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries)} /> ),
-    { key: 'exchanges',  label: 'Справочник бирж',   render: ()   => ( <ExchangesPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries)} /> ),
+    { key: 'stocks',     label: 'Справочник акций',  render: ()   => (<StocksPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries)} /> ) },
+    { key: 'exchanges',  label: 'Справочник бирж',   render: ()   => ( <ExchangesPage readOnlyDicts={!(isAdmin || canEditAll || canEditDictionaries)} /> ) },
     { key: 'report',     label: 'Отчёт по портфелю', render: (uid, ro) => <PortfolioReport filterUserId={uid} /> },
   ];
 

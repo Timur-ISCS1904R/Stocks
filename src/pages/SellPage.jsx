@@ -397,7 +397,7 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
                   <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{trade.quantity}</TableCell>
                   <TableCell align="right">{formatCurrency(trade.total_amount, currency)}</TableCell>
                   <TableCell align="center">
-                    {!readOnly && (<IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error"> <DeleteIcon fontSize="small" /> <DeleteIcon fontSize="small" /> )}
+                    {!readOnly && (<IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error"> <DeleteIcon fontSize="small" /> <DeleteIcon fontSize="small" /> </IconButton> )}
                   </TableCell>
                 </TableRow>
               );

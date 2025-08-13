@@ -31,7 +31,7 @@ const formatDateToYYYYMMDD = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function DividendsPage() {
+export default function DividendsPage({ filterUserId = null, readOnly = false }) {
   const [exchanges, setExchanges] = useState([]);
   const [allStocks, setAllStocks] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -86,6 +86,7 @@ export default function DividendsPage() {
         .from('dividends')
         .select('*')
         .order('payment_date', { ascending: false });
+      if (filterUserId) q = q.eq('user_id', filterUserId);
       if (!error) {
         setDividends(data);
         setFilteredDividends(data);
@@ -100,6 +101,7 @@ export default function DividendsPage() {
       const { data, error } = await supabase
         .from('trades')
         .select('*');
+      if (filterUserId) q = q.eq('user_id', filterUserId);
       if (!error) {
         setTrades(data);
         calculateBalances(data);
@@ -345,7 +347,7 @@ export default function DividendsPage() {
           </Grid>
 
           <Grid item xs={12} sm="auto">
-            <Button variant="contained" type="submit" fullWidth sx={{ height: '100%' }}>Добавить</Button>
+            <Button variant="contained" type="submit" disabled={readOnly} fullWidth sx={{ height: '100%' }}>Добавить</Button>
           </Grid>
         </Grid>
       </form>
@@ -409,7 +411,7 @@ export default function DividendsPage() {
                   <TableCell align="right">{formatCurrency(div.amount_per_share, currency)}</TableCell>
                   <TableCell align="right">{formatCurrency(total, currency)}</TableCell>
                   <TableCell align="center">
-                    <IconButton onClick={() => handleDelete(div.dividend_id)} size="small" color="error">
+                    <IconButton onClick={() => handleDelete(div.dividend_id)} disabled={readOnly} size="small" color="error">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

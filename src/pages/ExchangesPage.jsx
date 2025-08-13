@@ -134,11 +134,6 @@ export default function ExchangesPage({ readOnlyDicts = false }) {
                         </IconButton>
                       </>
                     )}
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton onClick={() => handleDelete(exchange.exchange_id)} size="small" color="error">
-                    <DeleteIcon />
-                  </IconButton>
                 </TableCell>
               </TableRow>
             ))}

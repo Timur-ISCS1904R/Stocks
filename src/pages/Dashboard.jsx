@@ -229,7 +229,7 @@ export default function Dashboard({ session }) {
           {visibleTabs.length > 0 && (
             visibleTabs.map((t, idx) =>
               idx === tab ? (
-                <Box key={t.key}>
+                <Box key={`${activeUserId || meId}-${t.key}`}>
                   {/* для вкладок, которые зависят от владельца — прокидываем filterUserId */}
                   {['buy','sell','dividends','report'].includes(t.key)
                     ? t.render(activeUserId || meId)

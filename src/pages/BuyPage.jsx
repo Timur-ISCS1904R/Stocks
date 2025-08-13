@@ -31,7 +31,7 @@ const formatDateToYYYYMMDD = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function BuyPage({ filterUserId = null, readOnly = false }) {
+export default function BuyPage() {
   const [exchanges, setExchanges] = useState([]);
   const [allStocks, setAllStocks] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -52,8 +52,6 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
   const [filterTicker, setFilterTicker] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState(null);
   const [filterDateTo, setFilterDateTo] = useState(null);
-
-  const [currency, setCurrency] = useState('₸');
 
   useEffect(() => {
     async function fetchExchanges() {
@@ -82,25 +80,22 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
       return;
     }
     setStocks(allStocks.filter(s => s.exchange_id === selectedExchange.exchange_id));
-    setCurrency(selectedExchange?.currency?.symbol || '₸');
   }, [selectedExchange, allStocks]);
 
   useEffect(() => {
     async function fetchTrades() {
-      let q = supabase
+      const { data, error } = await supabase
         .from('trades')
         .select('*')
         .eq('trade_type', 'BUY')
         .order('trade_date', { ascending: false });
-      if (filterUserId) q = q.eq('user_id', filterUserId);
-      const { data, error } = await q;
       if (!error) {
-        setTrades(data || []);
-        setFilteredTrades(data || []);
+        setTrades(data);
+        setFilteredTrades(data);
       }
     }
     fetchTrades();
-  }, [filterUserId]);
+  }, []);
 
   // Обновление фильтрации
   useEffect(() => {
@@ -113,11 +108,15 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
       });
     }
 
-    const from = filterDateFrom ? formatDateToYYYYMMDD(filterDateFrom) : null;
-    const to = filterDateTo ? formatDateToYYYYMMDD(filterDateTo) : null;
+    if (filterDateFrom) {
+      const from = formatDateToYYYYMMDD(filterDateFrom);
+      filtered = filtered.filter(trade => trade.trade_date >= from);
+    }
 
-    if (from) filtered = filtered.filter(trade => trade.trade_date >= from);
-    if (to) filtered = filtered.filter(trade => trade.trade_date <= to);
+    if (filterDateTo) {
+      const to = formatDateToYYYYMMDD(filterDateTo);
+      filtered = filtered.filter(trade => trade.trade_date <= to);
+    }
 
     setFilteredTrades(filtered);
   }, [filterTicker, filterDateFrom, filterDateTo, trades, allStocks]);
@@ -189,111 +188,131 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
 
   return (
     <Box>
-      {/* форма — как была; только кнопка учитывает readOnly */}
-      <form onSubmit={handleSubmit} style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Биржа</InputLabel>
-          <Select
-            value={selectedExchange ? selectedExchange.exchange_id : ''}
-            label="Биржа"
-            onChange={e => {
-              const ex = exchanges.find(x => x.exchange_id === e.target.value);
-              setSelectedExchange(ex || null);
-              setForm(prev => ({ ...prev, ticker: '' }));
-            }}
-            required
-          >
-            <MenuItem value=""><em>Выберите</em></MenuItem>
-            {exchanges.map(ex => (
-              <MenuItem key={ex.exchange_id} value={ex.exchange_id}>{ex.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={6} md="auto">
+            <FormControl fullWidth sx={{ minWidth: { md: 150 } }}>
+              <InputLabel>Биржа</InputLabel>
+              <Select
+                value={selectedExchange ? selectedExchange.exchange_id : ''}
+                label="Биржа"
+                onChange={e => {
+                  const ex = exchanges.find(x => x.exchange_id === e.target.value);
+                  setSelectedExchange(ex || null);
+                  setForm(prev => ({ ...prev, ticker: '' }));
+                }}
+                required
+              >
+                <MenuItem value=""><em>Выберите</em></MenuItem>
+                {exchanges.map(ex => (
+                  <MenuItem key={ex.exchange_id} value={ex.exchange_id}>{ex.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Тикер</InputLabel>
-          <Select
-            value={form.ticker}
-            label="Тикер"
-            onChange={handleChange}
-            name="ticker"
-            required
-            disabled={!selectedExchange}
-          >
-            <MenuItem value=""><em>Выберите</em></MenuItem>
-            {stocks.map(stock => (
-              <MenuItem key={stock.stock_id} value={stock.ticker}>{stock.ticker}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+          <Grid item xs={12} sm={6} md="auto">
+            <FormControl fullWidth sx={{ minWidth: { md: 150 } }}>
+              <InputLabel>Тикер</InputLabel>
+              <Select
+                value={form.ticker}
+                label="Тикер"
+                onChange={handleChange}
+                name="ticker"
+                required
+                disabled={!selectedExchange}
+              >
+                <MenuItem value=""><em>Выберите</em></MenuItem>
+                {stocks.map(stock => (
+                  <MenuItem key={stock.stock_id} value={stock.ticker}>{stock.ticker}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
-        <TextField
-          label="Цена"
-          name="price"
-          value={form.price}
-          onChange={handleChange}
-          type="number"
-          inputProps={{ step: "0.0001" }}
-          required
-          sx={{ width: 120 }}
-        />
+          <Grid item xs={6} sm={4} md="auto">
+            <TextField
+              fullWidth
+              label="Цена"
+              name="price"
+              value={form.price}
+              onChange={handleChange}
+              type="number"
+              inputProps={{ step: "0.0001" }}
+              required
+            />
+          </Grid>
 
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
-          <DatePicker
-            label="Дата"
-            value={dateValue}
-            onChange={(newValue) => {
-              setDateValue(newValue);
-              const formattedDate = formatDateToYYYYMMDD(newValue);
-              setForm(prev => ({ ...prev, date: formattedDate }));
-            }}
-            renderInput={(params) => (
-              <TextField {...params} required sx={{ width: 160 }} />
-            )}
-          />
-        </LocalizationProvider>
+          <Grid item xs={6} sm={4} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата"
+                value={dateValue}
+                onChange={(newValue) => {
+                  setDateValue(newValue);
+                  const formattedDate = formatDateToYYYYMMDD(newValue);
+                  setForm(prev => ({ ...prev, date: formattedDate }));
+                }}
+                renderInput={(params) => (
+                  <TextField {...params} required fullWidth />
+                )}
+              />
+            </LocalizationProvider>
+          </Grid>
 
-        <TextField
-          label="Количество"
-          name="quantity"
-          value={form.quantity}
-          onChange={handleChange}
-          type="number"
-          required
-          sx={{ width: 120 }}
-        />
+          <Grid item xs={6} sm={4} md="auto">
+            <TextField
+              fullWidth
+              label="Количество"
+              name="quantity"
+              value={form.quantity}
+              onChange={handleChange}
+              type="number"
+              required
+            />
+          </Grid>
 
-        <Button variant="contained" type="submit" sx={{ alignSelf: 'center' }} disabled={readOnly}>Добавить</Button>
+          <Grid item xs={12} sm="auto">
+            <Button variant="contained" type="submit" fullWidth sx={{ height: '100%' }}>Добавить</Button>
+          </Grid>
+        </Grid>
       </form>
 
       {/* Фильтры */}
       <Box sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
-          <TextField
-            label="Фильтр по тикеру"
-            value={filterTicker}
-            onChange={e => setFilterTicker(e.target.value)}
-            sx={{ minWidth: 150 }}
-          />
-          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
-            <DatePicker
-              label="Дата с"
-              value={filterDateFrom}
-              onChange={setFilterDateFrom}
-              renderInput={(params) => <TextField {...params} sx={{ width: 140 }} />}
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6} md={4}>
+            <TextField
+              fullWidth
+              label="Фильтр по тикеру"
+              value={filterTicker}
+              onChange={e => setFilterTicker(e.target.value)}
             />
-            <DatePicker
-              label="Дата по"
-              value={filterDateTo}
-              onChange={setFilterDateTo}
-              renderInput={(params) => <TextField {...params} sx={{ width: 140 }} />}
-            />
-          </LocalizationProvider>
-        </Stack>
+          </Grid>
+          <Grid item xs={6} sm={3} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата с"
+                value={filterDateFrom}
+                onChange={setFilterDateFrom}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </LocalizationProvider>
+          </Grid>
+          <Grid item xs={6} sm={3} md="auto">
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ruLocale}>
+              <DatePicker
+                label="Дата по"
+                value={filterDateTo}
+                onChange={setFilterDateTo}
+                renderInput={(params) => <TextField {...params} fullWidth />}
+              />
+            </LocalizationProvider>
+          </Grid>
+        </Grid>
       </Box>
 
-      {/* Таблица */}
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -308,6 +327,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
           <TableBody>
             {filteredTrades.map(trade => {
               const stock = allStocks.find(s => s.stock_id === trade.stock_id);
+              const currency = exchanges.find(e => e.exchange_id === (stock?.exchange_id))?.currency?.symbol || '';
               return (
                 <TableRow key={trade.trade_id}>
                   <TableCell>{trade.trade_date}</TableCell>
@@ -316,7 +336,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
                   <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{trade.quantity}</TableCell>
                   <TableCell align="right">{formatCurrency(trade.total_amount, currency)}</TableCell>
                   <TableCell align="center">
-                    <IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error" disabled={readOnly}>
+                    <IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

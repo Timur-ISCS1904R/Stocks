@@ -31,7 +31,7 @@ const formatDateToYYYYMMDD = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-export default function BuyPage() {
+export default function BuyPage({ filterUserId = null, readOnly = false }) {
   const [exchanges, setExchanges] = useState([]);
   const [allStocks, setAllStocks] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -89,6 +89,7 @@ export default function BuyPage() {
         .select('*')
         .eq('trade_type', 'BUY')
         .order('trade_date', { ascending: false });
+      if (filterUserId) q = q.eq('user_id', filterUserId);
       if (!error) {
         setTrades(data);
         setFilteredTrades(data);
@@ -273,7 +274,7 @@ export default function BuyPage() {
           </Grid>
 
           <Grid item xs={12} sm="auto">
-            <Button variant="contained" type="submit" fullWidth sx={{ height: '100%' }}>Добавить</Button>
+            <Button variant="contained" type="submit" disabled={readOnly} fullWidth sx={{ height: '100%' }}>Добавить</Button>
           </Grid>
         </Grid>
       </form>
@@ -336,7 +337,7 @@ export default function BuyPage() {
                   <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{trade.quantity}</TableCell>
                   <TableCell align="right">{formatCurrency(trade.total_amount, currency)}</TableCell>
                   <TableCell align="center">
-                    <IconButton onClick={() => handleDelete(trade.trade_id)} size="small" color="error">
+                    <IconButton onClick={() => handleDelete(trade.trade_id)} disabled={readOnly} size="small" color="error">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

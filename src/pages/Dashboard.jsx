@@ -70,7 +70,6 @@ export default function Dashboard({ session }) {
     loadUsersAndMe();
   }, [meId]);
 
-  const isAdmin = !!currentProfile?.is_admin;
 
   // ---- список вкладок-пользователей (сверху) ----
   // админ: все пользователи; не админ: сам + владельцы, давшие гранты

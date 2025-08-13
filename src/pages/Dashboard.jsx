@@ -188,9 +188,6 @@ export default function Dashboard({ session }) {
       {/* Вкладки пользователей */}
       {userTabs.length > 0 && (
         <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 1 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
-            Портфель пользователя:
-          </Typography>
           <Tabs
             value={userTab}
             onChange={(_, v) => setUserTab(v)}

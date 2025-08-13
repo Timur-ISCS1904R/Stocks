@@ -81,11 +81,12 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
   // Загрузка всех сделок (BUY и SELL)
   useEffect(() => {
     async function fetchTrades() {
-      const { data, error } = await supabase
+     let q = supabase
         .from('trades')
         .select('*')
         .order('trade_date', { ascending: false });
       if (filterUserId) q = q.eq('user_id', filterUserId);
+      const { data, error } = await q;
       if (!error) {
         setTrades(data);
         setFilteredTrades(data.filter(t => t.trade_type === 'SELL'));
@@ -93,7 +94,7 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
       }
     }
     fetchTrades();
-  }, []);
+  }, [filterUserId]);
 
   // Расчет остатков по акциям (куплено минус продано)
   function calculateBalances(tradesData) {

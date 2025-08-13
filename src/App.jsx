@@ -1,7 +1,9 @@
 // src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from './supabaseClient';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ErrorHandler, useErrorHandler } from './lib/errorHandler';
+import ErrorBoundary, { withErrorBoundary } from './components/ErrorBoundary';
 
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
@@ -9,7 +11,7 @@ import AdminPanel from './admin/AdminPanel';
 import Logout from './pages/Logout';
 import AccountPasswordPage from './pages/AccountPasswordPage';
 
-import { Box, Paper, TextField, Button, Typography, Alert } from '@mui/material';
+import { Box, Paper, TextField, Button, Typography, Alert, CircularProgress } from '@mui/material';
 
 const policy = {
   minLen: 12,
@@ -29,102 +31,353 @@ function validatePassword(pw) {
   return errors;
 }
 
-function ChangePasswordPage({ onDone }) {
+const ChangePasswordPage = withErrorBoundary(function ChangePasswordPage({ onDone }) {
+  const { error, loading, handleError, clearError, withErrorHandling } = useErrorHandler();
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [newPw2, setNewPw2] = useState('');
-  const [err, setErr] = useState('');
-  const [ok, setOk] = useState('');
+  const [success, setSuccess] = useState('');
 
-  async function submit() {
-    setErr(''); setOk('');
-    if (!oldPw || !newPw || !newPw2) return setErr('Заполни все поля');
-    if (newPw !== newPw2) return setErr('Новый пароль и подтверждение не совпадают');
-    const v = validatePassword(newPw);
-    if (v.length) return setErr('Политика паролей: ' + v.join('; '));
+  const submit = async () => {
+    clearError();
+    setSuccess('');
 
-    const { data: sdata } = await supabase.auth.getSession();
-    const email = sdata?.session?.user?.email;
-    const token = sdata?.session?.access_token;
-    const uid = sdata?.session?.user?.id;
-    if (!email || !token || !uid) return setErr('Нет активной сессии');
-
-    // проверка старого пароля
-    const reauth = await supabase.auth.signInWithPassword({ email, password: oldPw });
-    if (reauth.error) return setErr('Старый пароль неверный');
-
-    // смена пароля
-    const upd = await supabase.auth.updateUser({ password: newPw });
-    if (upd.error) return setErr('Не удалось обновить пароль: ' + upd.error.message);
-
-    // отметка первого входа — сначала через бэкенд
-    try {
-      const base = process.env.REACT_APP_ADMIN_API || 'http://localhost:4000';
-      await fetch(`${base}/api/self/complete-first-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    // Валидация
+    if (!oldPw || !newPw || !newPw2) {
+      handleError(new Error('Заполните все поля'), { component: '    const validationErrors = validatePassword(newPw);
+    if (validationErrors.length) {
+      handleError(new Error('Политика паролей: ' + validationErrors.join('; ')), { 
+        component: 'ChangePassword', 
+        action: 'validation',
+        passwordLength: newPw.length 
       });
-    } catch {}
+      return;
+    }
 
-    // план Б: пробуем напрямую (если есть политика self-update)
-    try {
-      await supabase
-        .from('users')
-        .update({ must_change_password: false, first_login_at: new Date().toISOString() })
-        .eq('user_id', uid);
-    } catch {}
+    await withErrorHandling(async () => {
+      // Получение текущей сессии
+      const { data: sdata } = await supabase.auth.getSession();
+      const email = sdata?.session?.user?.email;
+      const token = sdata?.session?.access_token;
+      const uid = sdata?.session?.user?.id;
+      
+      if (!email || !token || !uid) {
+        throw new Error('Нет активной сессии. Войдите в систему заново.');
+      }
 
-    setOk('Пароль успешно изменён');
-    if (onDone) onDone();
-  }
+      console.log('🔐 Changing password for user:', { uid, email });
+
+      // Проверка старого пароля через re-authentication
+      const { error: reAuthError } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password: oldPw 
+      });
+      
+      if (reAuthError) {
+        throw new Error('Старый пароль неверный');
+      }
+
+      // Смена пароля
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPw });
+      if (updateError) {
+        throw new Error(`Не удалось обновить пароль: ${updateError.message}`);
+      }
+
+      // Отметка завершения первого входа через backend API
+      try {
+        const base = process.env.REACT_APP_ADMIN_API || 'http://localhost:4000';
+        const response = await fetch(`${base}/api/self/complete-first-login`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json', 
+            Authorization: `Bearer ${token}` 
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('Failed to update first_login via API, trying direct DB update');
+          // Fallback: прямое обновление БД
+          await supabase
+            .from('users')
+            .update({ 
+              must_change_password: false, 
+              first_login_at: new Date().toISOString() 
+            })
+            .eq('user_id', uid);
+        }
+      } catch (apiError) {
+        console.warn('API call failed, using fallback:', apiError.message);
+        // Fallback: прямое обновление БД
+        await supabase
+          .from('users')
+          .update({ 
+            must_change_password: false, 
+            first_login_at: new Date().toISOString() 
+          })
+          .eq('user_id', uid);
+      }
+
+      setSuccess('Пароль успешно изменён');
+      console.log('✅ Password changed successfully');
+      
+      // Очистка формы
+      setOldPw('');
+      setNewPw('');
+      setNewPw2('');
+      
+      // Уведомление родительского компонента
+      if (onDone) {
+        setTimeout(() => {
+          onDone();
+        }, 1500); // Показываем успешное сообщение перед редиректом
+      }
+
+    }, { 
+      component: 'ChangePassword', 
+      action: 'submit',
+      hasEmail: !!email,
+      hasToken: !!token 
+    });
+  };
 
   return (
     <Box sx={{ display:'flex', justifyContent:'center', alignItems:'center', minHeight:'80vh', p:2 }}>
       <Paper sx={{ p:3, width: 420 }}>
         <Typography variant="h6" mb={2}>Смена пароля</Typography>
-        {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
-        {ok && <Alert severity="success" sx={{ mb: 2 }}>{ok}</Alert>}
-        <TextField label="Старый пароль" type="password" fullWidth sx={{ mb:2 }} value={oldPw} onChange={e => setOldPw(e.target.value)} />
-        <TextField label="Новый пароль" type="password" fullWidth sx={{ mb:2 }} value={newPw} onChange={e => setNewPw(e.target.value)} helperText="≥12, A-Z, a-z, цифра, спецсимвол" />
-        <TextField label="Повтори новый пароль" type="password" fullWidth sx={{ mb:2 }} value={newPw2} onChange={e => setNewPw2(e.target.value)} />
-        <Button variant="contained" onClick={submit} fullWidth>Обновить пароль</Button>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
+            {error.message}
+          </Alert>
+        )}
+        
+        {success && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {success}
+          </Alert>
+        )}
+        
+        <TextField 
+          label="Старый пароль" 
+          type="password" 
+          fullWidth 
+          sx={{ mb:2 }} 
+          value={oldPw} 
+          onChange={e => setOldPw(e.target.value)}
+          disabled={loading}
+        />
+        
+        <TextField 
+          label="Новый пароль" 
+          type="password" 
+          fullWidth 
+          sx={{ mb:2 }} 
+          value={newPw} 
+          onChange={e => setNewPw(e.target.value)} 
+          helperText="≥12 символов, A-Z, a-z, цифра, спецсимвол"
+          disabled={loading}
+        />
+        
+        <TextField 
+          label="Повтори новый пароль" 
+          type="password" 
+          fullWidth 
+          sx={{ mb:2 }} 
+          value={newPw2} 
+          onChange={e => setNewPw2(e.target.value)}
+          disabled={loading}
+        />
+        
+        <Button 
+          variant="contained" 
+          onClick={submit} 
+          fullWidth
+          disabled={loading || !oldPw || !newPw || !newPw2}
+          startIcon={loading && <CircularProgress size={20} />}
+        >
+          {loading ? 'Обновляется...' : 'Обновить пароль'}
+        </Button>
       </Paper>
     </Box>
   );
-}
+}, { name: 'ChangePasswordPage' });
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState(null); // must_change_password / first_login_at
+  const [profile, setProfile] = useState(null);
+  const [appError, setAppError] = useState(null);
 
+  // Инициализация сессии
   useEffect(() => {
-    let unsub = () => {};
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data?.session ?? null);
-      setLoading(false);
+    let unsubscribe = () => {};
+    
+    const initializeAuth = async () => {
+      try {
+        console.log('🔐 Initializing authentication...');
+        
+        // Получение текущей сессии
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Error getting session:', error);
+          ErrorHandler.logError(error, { component: 'App', action: 'getSession' });
+          setAppError('Ошибка при получении сессии. Попробуйте перезагрузить страницу.');
+        } else {
+          setSession(data?.session ?? null);
+          console.log('✅ Session initialized:', data?.session ? 'authenticated' : 'not authenticated');
+        }
 
-      const sub = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-      unsub = () => sub?.data?.subscription?.unsubscribe?.();
-    })();
-    return () => unsub();
+        // Подписка на изменения состояния аутентификации
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+          console.log('🔐 Auth state changed:', event, newSession ? 'authenticated' : 'not authenticated');
+          
+          setSession(newSession);
+          
+          // Логирование важных событий аутентификации
+          if (event === 'SIGNED_IN') {
+            ErrorHandler.logError(new Error('User signed in'), { 
+              component: 'App', 
+              action: 'auth_change',
+              event,
+              userId: newSession?.user?.id,
+              type: 'INFO'
+            });
+          } else if (event === 'SIGNED_OUT') {
+            setProfile(null); // Сброс профиля при выходе
+            ErrorHandler.logError(new Error('User signed out'), { 
+              component: 'App', 
+              action: 'auth_change',
+              event,
+              type: 'INFO'
+            });
+          }
+        });
+
+        unsubscribe = () => subscription?.unsubscribe?.();
+        
+      } catch (error) {
+        console.error('❌ Fatal error during auth initialization:', error);
+        ErrorHandler.logError(error, { component: 'App', action: 'initializeAuth' });
+        setAppError('Критическая ошибка инициализации. Перезагрузите страницу.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
+    return () => unsubscribe();
   }, []);
 
+  // Загрузка профиля пользователя
   useEffect(() => {
-    if (!session) return setProfile(null);
-    (async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('must_change_password, first_login_at')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-      if (!error) setProfile(data || {});
-    })();
+    if (!session?.user?.id) {
+      setProfile(null);
+      return;
+    }
+
+    const loadProfile = async () => {
+      try {
+        console.log('👤 Loading user profile for:', session.user.id);
+        
+        const { data, error } = await supabase
+          .from('users')
+          .select('must_change_password, first_login_at, is_admin')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('❌ Error loading profile:', error);
+          ErrorHandler.logError(error, { 
+            component: 'App', 
+            action: 'loadProfile',
+            userId: session.user.id 
+          });
+          // Не показываем ошибку пользователю, так как профиль не критичен
+        } else {
+          setProfile(data || {});
+          console.log('✅ Profile loaded:', { 
+            mustChangePassword: data?.must_change_password,
+            isAdmin: data?.is_admin,
+            hasFirstLogin: !!data?.first_login_at
+          });
+        }
+      } catch (error) {
+        console.error('❌ Unexpected error loading profile:', error);
+        ErrorHandler.logError(error, { 
+          component: 'App', 
+          action: 'loadProfile', 
+          userId: session.user.id 
+        });
+      }
+    };
+
+    loadProfile();
   }, [session]);
 
-  if (loading) return <div>Загрузка…</div>;
-  if (!session) return <LoginPage onLogin={setSession} />;
+  const handlePasswordChangeComplete = useCallback(() => {
+    console.log('🔐 Password change completed, reloading...');
+    window.location.href = '/';
+  }, []);
+
+  const clearAppError = useCallback(() => {
+    setAppError(null);
+  }, []);
+
+  const handleReload = useCallback(() => {
+    window.location.reload();
+  }, []);
+
+  // Состояние загрузки
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh',
+        flexDirection: 'column',
+        gap: 2
+      }}>
+        <CircularProgress />
+        <Typography variant="body2" color="text.secondary">
+          Инициализация приложения...
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Критическая ошибка приложения
+  if (appError) {
+    return (
+      <Box sx={{ p: 3, maxWidth: 600, mx: 'auto', mt: 8 }}>
+        <Alert 
+          severity="error" 
+          action={
+            <Button color="inherit" size="small" onClick={handleReload}>
+              Перезагрузить
+            </Button>
+          }
+        >
+          <Typography variant="h6" gutterBottom>
+            Ошибка инициализации
+          </Typography>
+          <Typography variant="body2">
+            {appError}
+          </Typography>
+        </Alert>
+      </Box>
+    );
+  }
+
+  // Не авторизован - показываем страницу входа
+  if (!session) {
+    return (
+      <ErrorBoundary name="LoginPage">
+        <LoginPage onLogin={setSession} />
+      </ErrorBoundary>
+    );
+  }
 
   // Принудительная смена пароля
   if (profile?.must_change_password) {
@@ -133,7 +386,9 @@ export default function App() {
         <Routes>
           <Route
             path="/account/password"
-            element={<ChangePasswordPage onDone={() => (window.location.href = '/')} />}
+            element={
+              <ChangePasswordPage onDone={handlePasswordChangeComplete} />
+            }
           />
           <Route path="*" element={<Navigate to="/account/password" replace />} />
         </Routes>
@@ -141,15 +396,57 @@ export default function App() {
     );
   }
 
+  // Основное приложение
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Dashboard session={session} />} />
-        <Route path="/admin" element={<AdminPanel />} />
-        <Route path="/account/password" element={<AccountPasswordPage />} />
-        <Route path="/logout" element={<Logout />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary 
+      name="MainApp" 
+      userId={session.user.id}
+      onError={(error, errorInfo, context) => {
+        // В production отправляем критические ошибки в внешний сервис
+        if (process.env.NODE_ENV === 'production') {
+          console.error('Critical app error:', { error, errorInfo, context });
+        }
+      }}
+    >
+      <BrowserRouter>
+        <Routes>
+          <Route 
+            path="/" 
+            element={
+              <ErrorBoundary name="Dashboard">
+                <Dashboard session={session} profile={profile} />
+              </ErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/admin" 
+            element={
+              <ErrorBoundary name="AdminPanel">
+                <AdminPanel />
+              </ErrorBoundary>
+            } 
+          />
+          <Route 
+            path="/account/password" 
+            element={
+              <ErrorBoundary name="AccountPasswordPage">
+                <AccountPasswordPage />
+              </ErrorBoundary>
+            } 
+          />
+          <Route path="/logout" element={<Logout />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
+    
+    if (newPw !== newPw2) {
+      handleError(new Error('Новый пароль и подтверждение не совпадают'), { component: 'ChangePassword', action: 'validation' });
+      return;
+    }
+    
+    const validationErrors = validatePassword(newPw);
+    if (validationErrors.length) {
+      handleError(new Error('Политика паролей: ' + validationErrors.join('; ')), { component: '

@@ -101,12 +101,12 @@ export default function Dashboard({ session }) {
   // ---- конфигурация вкладок (нижние вкладки контента) ----
   // Порядок и подписи не меняем, только решаем показывать/скрывать.
   const TAB_CONFIG = [
-    { key: 'buy',        label: 'Покупка',           render: (uid) => <BuyPage filterUserId={uid} /> },
-    { key: 'sell',       label: 'Продажа',           render: (uid) => <SellPage filterUserId={uid} /> },
-    { key: 'dividends',  label: 'Дивиденды',         render: (uid) => <DividendsPage filterUserId={uid} /> },
+    { key: 'buy',        label: 'Покупка',           render: (uid, ro) => <BuyPage filterUserId={uid} readOnly={ro} /> },
+    { key: 'sell',       label: 'Продажа',           render: (uid, ro) => <SellPage filterUserId={uid} readOnly={ro} /> },
+    { key: 'dividends',  label: 'Дивиденды',         render: (uid, ro) => <DividendsPage filterUserId={uid} readOnly={ro} /> },
     { key: 'stocks',     label: 'Справочник акций',  render: ()   => <StocksPage /> },
     { key: 'exchanges',  label: 'Справочник бирж',   render: ()   => <ExchangesPage /> },
-    { key: 'report',     label: 'Отчёт по портфелю', render: (uid) => <PortfolioReport filterUserId={uid} /> },
+    { key: 'report',     label: 'Отчёт по портфелю', render: (uid, ro) => <PortfolioReport filterUserId={uid} /> },
   ];
 
   // для выбранного пользователя определить, какие вкладки показывать

@@ -82,33 +82,35 @@ export default function DividendsPage({ filterUserId = null, readOnly = false })
   // Загрузка дивидендов
   useEffect(() => {
     async function fetchDividends() {
-      const { data, error } = await supabase
+      let q = supabase
         .from('dividends')
         .select('*')
         .order('payment_date', { ascending: false });
       if (filterUserId) q = q.eq('user_id', filterUserId);
+      const { data, error } = await q;
       if (!error) {
         setDividends(data);
         setFilteredDividends(data);
       }
     }
     fetchDividends();
-  }, []);
+  }, [filterUserId]);
 
   // Загрузка сделок (BUY и SELL), чтобы рассчитать остатки
   useEffect(() => {
     async function fetchTrades() {
-      const { data, error } = await supabase
+      let q = supabase
         .from('trades')
         .select('*');
       if (filterUserId) q = q.eq('user_id', filterUserId);
+      const { data, error } = await q;
       if (!error) {
         setTrades(data);
         calculateBalances(data);
       }
     }
     fetchTrades();
-  }, []);
+  }, [filterUserId]);
 
   function calculateBalances(tradesData) {
     const balances = {};

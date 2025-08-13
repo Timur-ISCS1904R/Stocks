@@ -227,7 +227,7 @@ export default function AdminPanel() {
                         <TableCell align="center">
                           <Tooltip title="Удалить пользователя">
                             <span>
-                              <IconButton color="error" size="small" onClick={() => removeUser(u.id)} disabled={u.is_admin}>
+                              <IconButton color="error" size="small" onClick={() => removeUser(u.id)}>
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </span>
@@ -522,4 +522,5 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 

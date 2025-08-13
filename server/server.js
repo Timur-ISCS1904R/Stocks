@@ -1,10 +1,86 @@
+// server/server.js
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+
+// Structured Logging
+class Logger {
+  static log(level, message, meta = {}) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      ...meta,
+      pid: process.pid,
+      hostname: process.env.HOSTNAME || 'unknown'
+    };
+
+    // В production используйте Winston или подобную библиотеку
+    if (level === 'error') {
+      console.error(JSON.stringify(logEntry));
+    } else {
+      console.log(JSON.stringify(logEntry));
+    }
+  }
+
+  static info(message, meta = {}) {
+    this.log('info', message, meta);
+  }
+
+  static error(message, meta = {}) {
+    this.log('error', message, meta);
+  }
+
+  static warn(message, meta = {}) {
+    this.log('warn', message, meta);
+  }
+
+  static debug(message, meta = {}) {
+    if (process.env.NODE_ENV !== 'production') {
+      this.log('debug', message, meta);
+    }
+  }
+}
+
+// Middleware для логирования запросов
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substr(2, 9);
+  
+  req.requestId = requestId;
+  req.startTime = startTime;
+
+  Logger.info('Incoming request', {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    contentLength: req.get('Content-Length')
+  });
+
+  const originalSend = res.send;
+  res.send = function(body) {
+    const duration = Date.now() - startTime;
+    
+    Logger.info('Request completed', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration,
+      responseSize: Buffer.isBuffer(body) ? body.length : JSON.stringify(body).length
+    });
+
+    originalSend.call(this, body);
+  };
+
+  next();
+});
 
 app.use(
   cors({
@@ -16,17 +92,39 @@ app.use(
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
+  { 
+    auth: { 
+      autoRefreshToken: false, 
+      persistSession: false 
+    }
+  }
 );
 
+// Улучшенный middleware для проверки админских прав
 async function requireAdmin(req, res, next) {
+  const requestId = req.requestId;
+  
   try {
     const auth = req.headers.authorization || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-    if (!token) return res.status(401).json({ error: 'No bearer token' });
+    
+    if (!token) {
+      Logger.warn('Missing bearer token', { requestId, path: req.path });
+      return res.status(401).json({ error: 'No bearer token' });
+    }
+
+    Logger.debug('Verifying token', { requestId, tokenPreview: token.substr(0, 20) + '...' });
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userRes?.user) return res.status(401).json({ error: 'Invalid token' });
+    
+    if (userErr || !userRes?.user) {
+      Logger.warn('Invalid token', { 
+        requestId, 
+        error: userErr?.message,
+        hasUser: !!userRes?.user 
+      });
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
     const userId = userRes.user.id;
 
@@ -36,271 +134,235 @@ async function requireAdmin(req, res, next) {
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (profErr) return res.status(500).json({ error: profErr.message });
-    if (!prof?.is_admin) return res.status(403).json({ error: 'Forbidden: admin only' });
+    if (profErr) {
+      Logger.error('Database error checking admin status', {
+        requestId,
+        userId,
+        error: profErr.message,
+        code: profErr.code
+      });
+      return res.status(500).json({ error: profErr.message });
+    }
 
-    req.admin = { id: userId, email: prof.email };
+    if (!prof?.is_admin) {
+      Logger.warn('Access denied - not admin', {
+        requestId,
+        userId,
+        email: userRes.user.email,
+        isAdmin: prof?.is_admin
+      });
+      return res.status(403).json({ error: 'Forbidden: admin only' });
+    }
+
+    req.admin = { 
+      id: userId, 
+      email: prof.email,
+      requestId 
+    };
+    
+    Logger.debug('Admin access granted', {
+      requestId,
+      adminId: userId,
+      adminEmail: prof.email
+    });
+
     next();
   } catch (e) {
-    console.error(e);
+    Logger.error('Auth middleware error', {
+      requestId,
+      path: req.path,
+      error: e.message,
+      stack: e.stack
+    });
     res.status(500).json({ error: 'Auth middleware error' });
   }
 }
 
+// Middleware для обычной авторизации
 async function requireAuth(req, res, next) {
+  const requestId = req.requestId;
+  
   try {
     const auth = req.headers.authorization || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-    if (!token) return res.status(401).json({ error: 'No bearer token' });
+    
+    if (!token) {
+      Logger.warn('Missing bearer token', { requestId, path: req.path });
+      return res.status(401).json({ error: 'No bearer token' });
+    }
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
-    if (userErr || !userRes?.user) return res.status(401).json({ error: 'Invalid token' });
+    
+    if (userErr || !userRes?.user) {
+      Logger.warn('Invalid token in requireAuth', { 
+        requestId, 
+        error: userErr?.message 
+      });
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
-    req.user = { id: userRes.user.id, email: userRes.user.email };
+    req.user = { 
+      id: userRes.user.id, 
+      email: userRes.user.email,
+      requestId 
+    };
+    
+    Logger.debug('User authenticated', {
+      requestId,
+      userId: userRes.user.id,
+      email: userRes.user.email
+    });
+
     next();
   } catch (e) {
-    console.error(e);
+    Logger.error('Auth middleware error', {
+      requestId,
+      path: req.path,
+      error: e.message,
+      stack: e.stack
+    });
     res.status(500).json({ error: 'Auth middleware error' });
   }
 }
 
-// helpers
-async function getAuthEmailById(user_id) {
-  const { data, error } = await supabase.auth.admin.getUserById(user_id);
-  if (error) return null;
-  return data?.user?.email || null;
+// Обработчик ошибок для всего приложения
+app.use((error, req, res, next) => {
+  const requestId = req.requestId;
+  
+  Logger.error('Unhandled error', {
+    requestId,
+    path: req.path,
+    method: req.method,
+    error: error.message,
+    stack: error.stack,
+    userId: req.user?.id || req.admin?.id
+  });
+
+  // Не отправляем внутренние детали в production
+  if (process.env.NODE_ENV === 'production') {
+    res.status(500).json({ error: 'Internal server error' });
+  } else {
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack,
+      requestId 
+    });
+  }
+});
+
+// Helper функция с улучшенным логированием
+async function getAuthEmailById(user_id, requestId) {
+  try {
+    Logger.debug('Fetching user email by ID', { requestId, user_id });
+    
+    const { data, error } = await supabase.auth.admin.getUserById(user_id);
+    
+    if (error) {
+      Logger.warn('Failed to fetch user email', { 
+        requestId, 
+        user_id, 
+        error: error.message 
+      });
+      return null;
+    }
+
+    const email = data?.user?.email || null;
+    Logger.debug('User email fetched', { requestId, user_id, hasEmail: !!email });
+    
+    return email;
+  } catch (e) {
+    Logger.error('Error in getAuthEmailById', {
+      requestId,
+      user_id,
+      error: e.message
+    });
+    return null;
+  }
 }
 
 // ---------- USERS ----------
 app.get('/api/users', requireAdmin, async (req, res) => {
+  const { requestId } = req;
+  
   try {
+    Logger.info('Fetching users list', { requestId, adminId: req.admin.id });
+
     const { data, error } = await supabase.auth.admin.listUsers();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      Logger.error('Failed to fetch users from auth', { 
+        requestId, 
+        error: error.message 
+      });
+      return res.status(500).json({ error: error.message });
+    }
 
     const ids = data.users.map(u => u.id);
+    Logger.debug('Found users in auth', { requestId, count: ids.length });
+
     let profiles = [];
     if (ids.length) {
       const { data: rows, error: pErr } = await supabase
         .from('users')
         .select('user_id, is_admin, email')
         .in('user_id', ids);
-      if (pErr) return res.status(500).json({ error: pErr.message });
+      
+      if (pErr) {
+        Logger.error('Failed to fetch user profiles', {
+          requestId,
+          error: pErr.message,
+          code: pErr.code
+        });
+        return res.status(500).json({ error: pErr.message });
+      }
       profiles = rows || [];
     }
+
     const idx = new Map(profiles.map(p => [p.user_id, p]));
     const result = data.users.map(u => ({
       id: u.id,
       email: u.email,
       is_admin: idx.get(u.id)?.is_admin ?? false
     }));
+
+    Logger.info('Users list fetched successfully', { 
+      requestId, 
+      totalUsers: result.length,
+      adminUsers: result.filter(u => u.is_admin).length
+    });
+
     res.json(result);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'users list error' });
-  }
-});
-
-app.post('/api/admin/users/create', requireAdmin, async (req, res) => {
-  try {
-    const { email, password, is_admin = false } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'email & password required' });
-
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true
+    Logger.error('Unexpected error in /api/users', {
+      requestId,
+      error: e.message,
+      stack: e.stack
     });
-    if (error) return res.status(500).json({ error: error.message });
-
-    const uid = data.user?.id;
-    if (uid) {
-      const { error: upErr } = await supabase.from('users').upsert({
-        user_id: uid,
-        email,
-        is_admin,
-        must_change_password: true
-      });
-      if (upErr) return res.status(500).json({ error: upErr.message });
-    }
-    res.json({ ok: true, user_id: uid });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'create user error' });
+    res.status(500).json({ error: 'Users list error' });
   }
 });
 
-app.post('/api/admin/users/delete', requireAdmin, async (req, res) => {
-  try {
-    const { user_id } = req.body;
-    if (!user_id) return res.status(400).json({ error: 'user_id required' });
+// Health check с диагностикой
+app.get('/health', (req, res) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  };
 
-    const { error } = await supabase.auth.admin.deleteUser(user_id);
-    if (error) return res.status(500).json({ error: error.message });
-
-    await supabase.from('users').delete().eq('user_id', user_id);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'delete user error' });
-  }
+  Logger.debug('Health check', { requestId: req.requestId, health });
+  res.json(health);
 });
 
-app.post('/api/admin/users/reset-password', requireAdmin, async (req, res) => {
-  try {
-    const { user_id, new_password } = req.body;
-    if (!user_id || !new_password) return res.status(400).json({ error: 'user_id & new_password required' });
-
-    const { error } = await supabase.auth.admin.updateUserById(user_id, { password: new_password });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'reset password error' });
-  }
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  Logger.info('Admin API started', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+    nodeVersion: process.version
+  });
 });
 
-// ---------- GLOBAL PERMISSIONS ----------
-app.get('/api/permissions', requireAdmin, async (req, res) => {
-  try {
-    const [perms, grants, admins] = await Promise.all([
-      supabase.from('user_permissions').select('*'),
-      supabase.from('user_grants').select('*'),
-      supabase.from('users').select('user_id, is_admin, email')
-    ]);
-    if (perms.error) return res.status(500).json({ error: perms.error.message });
-    if (grants.error) return res.status(500).json({ error: grants.error.message });
-    if (admins.error) return res.status(500).json({ error: admins.error.message });
-
-    res.json({
-      user_permissions: perms.data ?? [],
-      user_grants: grants.data ?? [],
-      users: admins.data ?? []
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'permissions fetch error' });
-  }
-});
-
-app.post('/api/permissions', requireAdmin, async (req, res) => {
-  try {
-    const { user_id, can_view_all = false, can_edit_all = false, can_edit_dictionaries = false, is_admin = false } = req.body;
-    if (!user_id) return res.status(400).json({ error: 'user_id required' });
-
-    // upsert user_permissions
-    const { error: e1 } = await supabase
-      .from('user_permissions')
-      .upsert({ user_id, can_view_all, can_edit_all, can_edit_dictionaries });
-    if (e1) return res.status(500).json({ error: e1.message });
-
-    // users: сначала проверим, есть ли строка
-    const { data: existing, error: selErr } = await supabase
-      .from('users')
-      .select('user_id, email')
-      .eq('user_id', user_id)
-      .maybeSingle();
-    if (selErr) return res.status(500).json({ error: selErr.message });
-
-    if (existing) {
-      const { error: updErr } = await supabase
-        .from('users')
-        .update({ is_admin })
-        .eq('user_id', user_id);
-      if (updErr) return res.status(500).json({ error: updErr.message });
-    } else {
-      // нужен email (NOT NULL). Берём из Auth.
-      const email = await getAuthEmailById(user_id);
-      if (!email) return res.status(500).json({ error: 'email not found for user' });
-      const { error: insErr } = await supabase
-        .from('users')
-        .insert({ user_id, email, is_admin });
-      if (insErr) return res.status(500).json({ error: insErr.message });
-    }
-
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'permissions upsert error' });
-  }
-});
-
-// ---------- USER GRANTS ----------
-app.post('/api/grant', requireAdmin, async (req, res) => {
-  try {
-    const { resource, owner_id = null, grantee_id, mode } = req.body;
-    if (!resource || !grantee_id || !mode) {
-      return res.status(400).json({ error: 'resource, grantee_id, mode required' });
-    }
-    const { error } = await supabase
-      .from('user_grants')
-      .upsert({ resource, owner_id, grantee_id, mode }, { onConflict: 'resource,owner_id,grantee_id,mode' });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'grant upsert error' });
-  }
-});
-
-app.delete('/api/grant', requireAdmin, async (req, res) => {
-  try {
-    const { resource, owner_id = null, grantee_id, mode } = req.body;
-    if (!resource || !grantee_id || !mode) {
-      return res.status(400).json({ error: 'resource, grantee_id, mode required' });
-    }
-    const q = supabase.from('user_grants').delete()
-      .eq('resource', resource)
-      .eq('grantee_id', grantee_id)
-      .eq('mode', mode);
-
-    if (owner_id === null || owner_id === undefined) q.is('owner_id', null);
-    else q.eq('owner_id', owner_id);
-
-    const { error } = await q;
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'grant delete error' });
-  }
-});
-
-// ---------- AUDIT ----------
-app.get('/api/audit', requireAdmin, async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit || '200', 10), 1000);
-    const { data, error } = await supabase
-      .from('audit_log')
-      .select('*')
-      .order('occurred_at', { ascending: false })
-      .limit(limit);
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data ?? []);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'audit fetch error' });
-  }
-});
-
-// ---------- SELF ----------
-app.post('/api/self/complete-first-login', requireAuth, async (req, res) => {
-  try {
-    const uid = req.user.id;
-    const { error } = await supabase
-      .from('users')
-      .update({ must_change_password: false, first_login_at: new Date().toISOString() })
-      .eq('user_id', uid);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'complete-first-login error' });
-  }
-});
-
-app.get('/health', (_req, res) => res.json({ ok: true }));
-
-app.listen(process.env.PORT || 4000, () =>
-  console.log(`Admin API listening on :${process.env.PORT || 4000}`)
-);
+export { Logger };

@@ -128,7 +128,7 @@ export default function StocksPage({ readOnlyDicts = false }) {
 
       {/* Фильтры */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid item xs={12} sm={6} md={6}>
           <TextField
             fullWidth
             label="Тикер"
@@ -136,7 +136,7 @@ export default function StocksPage({ readOnlyDicts = false }) {
             onChange={e => setFilterTicker(e.target.value)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={4}>
+        <Grid item xs={12} sm={6} md={6}>
           <FormControl fullWidth>
             <InputLabel>Биржа</InputLabel>
             <Select

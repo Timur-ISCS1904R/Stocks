@@ -20,7 +20,7 @@ import {
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
-export default function PortfolioReport() {
+export default function PortfolioReport({ filterUserId = null }) {
   const [trades, setTrades] = useState([]);
   const [dividends, setDividends] = useState([]);
   const [stocksMap, setStocksMap] = useState({});
@@ -53,9 +53,11 @@ export default function PortfolioReport() {
     async function fetchData() {
       setLoading(true);
       let tradesQuery = supabase.from('trades').select('*').order('trade_date', { ascending: false });
+      if (filterUserId) tradesQuery = tradesQuery.eq('user_id', filterUserId);
       if (dateFrom) tradesQuery = tradesQuery.gte('trade_date', dateFrom);
       if (dateTo) tradesQuery = tradesQuery.lte('trade_date', dateTo);
       let dividendsQuery = supabase.from('dividends').select('*').order('payment_date', { ascending: false });
+      if (filterUserId) dividendsQuery = dividendsQuery.eq('user_id', filterUserId);
       if (dateFrom) dividendsQuery = dividendsQuery.gte('payment_date', dateFrom);
       if (dateTo) dividendsQuery = dividendsQuery.lte('payment_date', dateTo);
 

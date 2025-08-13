@@ -84,7 +84,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
 
   useEffect(() => {
     async function fetchTrades() {
-      let q = await supabase
+      let q = supabase
         .from('trades')
         .select('*')
         .eq('trade_type', 'BUY')

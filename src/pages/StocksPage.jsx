@@ -136,11 +136,10 @@ export default function StocksPage({ readOnlyDicts = false }) {
             onChange={e => setFilterTicker(e.target.value)}
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={6}>
+        <Grid item xs={12} sm={6} md={4}>
           <FormControl fullWidth>
             <InputLabel>Биржа</InputLabel>
             <Select
-              fullWidth
               value={filterExchange}
               onChange={e => setFilterExchange(e.target.value)}
               label="Биржа"

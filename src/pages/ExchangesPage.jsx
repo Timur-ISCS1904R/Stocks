@@ -126,10 +126,10 @@ export default function ExchangesPage({ readOnlyDicts = false }) {
                 <TableCell>
                   {!readOnlyDicts && (
                       <>
-                        <IconButton onClick={() => onEdit(row)} size="small">
+                        <IconButton onClick={() => handleOpenDialog(exchange)} size="small">
                           <EditIcon fontSize="small" />
                         </IconButton>
-                        <IconButton onClick={() => onDelete(row.stock_id)} size="small" color="error">
+                        <IconButton onClick={() => handleDelete(exchange.exchange_id)} size="small" color="error">
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </>

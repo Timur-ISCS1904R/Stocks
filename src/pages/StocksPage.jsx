@@ -9,7 +9,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { supabase } from '../supabaseClient';
 
-export default function StocksPage() {
+export default function StocksPage({ readOnlyDicts = false }) {
   const [stocks, setStocks] = useState([]);
   const [exchanges, setExchanges] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -156,9 +156,7 @@ export default function StocksPage() {
         </Grid>
       </Grid>
 
-      <Button variant="contained" onClick={() => handleOpenDialog()} sx={{ mb: 2 }}>
-        Добавить акцию
-      </Button>
+      <Button variant="contained" onClick={handleAddStock} disabled={readOnlyDicts}>Добавить</Button>
 
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table size="small">
@@ -183,12 +181,16 @@ export default function StocksPage() {
                   <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>{stock.sector}</TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>{exchangeName}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => handleOpenDialog(stock)} size="small" color="primary">
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleDelete(stock.stock_id)} size="small" color="error">
-                      <DeleteIcon />
-                    </IconButton>
+                    {!readOnlyDicts && (
+                      <>
+                        <IconButton onClick={() => onEdit(row)} size="small">
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton onClick={() => onDelete(row.stock_id)} size="small" color="error">
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               );

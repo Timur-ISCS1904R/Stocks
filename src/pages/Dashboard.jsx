@@ -111,34 +111,34 @@ export default function Dashboard({ session }) {
 
   // для выбранного пользователя определить, какие вкладки показывать
   const visibleTabs = useMemo(() => {
+    // админ видит всё
+    if (isAdmin) return TAB_CONFIG;
 
 
     // если выбран "я сам" — все вкладки
     if (activeUserId && activeUserId === meId) return TAB_CONFIG;
 
+    // чужой портфель — строим список по грантам
+    const canTradesWrite = hasWrite(activeUserId, 'trades');
+    const canTradesRead  = hasRead(activeUserId, 'trades');
+    const canDivWrite    = hasWrite(activeUserId, 'dividends');
+    const canDivRead     = hasRead(activeUserId, 'dividends');
     // иначе — портфель другого пользователя: фильтруем по грантам
-    const arr = [];
+    const allow = new Set();
 
-    // trades -> buy/sell/report
-    if (hasWrite(activeUserId, 'trades')) {
-      arr.push('buy', 'sell', 'report');
-    } else if (hasRead(activeUserId, 'trades')) {
-      arr.push('report');
+    // trades:read → показываем Покупка, Продажа, Отчёт (но readOnly)
+    if (canTradesRead || canTradesWrite) {
+      allow.add('buy'); allow.add('sell'); allow.add('report');
+    }
+    // dividends:read → показываем Дивиденды (readOnly, если нет write)
+    if (canDivRead || canDivWrite) {
+      allow.add('dividends');
     }
 
-    // dividends -> dividends (read или write)
-    if (hasRead(activeUserId, 'dividends')) {
-      arr.push('dividends');
-    }
+    // Справочники при чужом портфеле НЕ показываем вовсе
 
-    // dictionaries:write -> stocks/exchanges
-    if (isSelf)) {
-      arr.push('stocks', 'exchanges');
-    }
-
-    const set = new Set(arr);
-    return TAB_CONFIG.filter(t => set.has(t.key));
-  }, [isAdmin, activeUserId, meId, myGrants]); // myGrants влияет на hasRead/hasWrite
+    return TAB_CONFIG.filter(t => allow.has(t.key));
+  }, [isAdmin, activeUserId, meId, myGrants]);
 
   // следим, чтобы индекс нижней вкладки не вываливался при смене набора
   useEffect(() => {

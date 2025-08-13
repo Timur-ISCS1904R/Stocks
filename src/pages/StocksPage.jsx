@@ -156,7 +156,7 @@ export default function StocksPage({ readOnlyDicts = false }) {
         </Grid>
       </Grid>
 
-      <Button variant="contained" onClick => handleOpenDialog()} disabled={readOnlyDicts}>Добавить</Button>
+      <Button variant="contained" onClick={() => handleOpenDialog()} disabled={readOnlyDicts}>Добавить</Button>
 
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table size="small">

@@ -257,7 +257,6 @@ export default function AdminPanel() {
                 >
                   <MenuItem value="trades">trades</MenuItem>
                   <MenuItem value="dividends">dividends</MenuItem>
-                  <MenuItem value="dictionaries">dictionaries</MenuItem>
                 </Select>
               </FormControl>
 
@@ -523,3 +522,4 @@ export default function AdminPanel() {
     </Box>
   );
 }
+

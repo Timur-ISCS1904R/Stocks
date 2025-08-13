@@ -96,6 +96,12 @@ export default function Dashboard({ session }) {
   const activeUser = userTabs[userTab] || null;
   const activeUserId = activeUser?.user_id || null;
   const activeUserName = (activeUser?.full_name && activeUser.full_name.trim()) || activeUser?.email || '—';
+  const isSelf = activeUserId && activeUserId === meId;
+  // права на редактирование разделов
+  const canEditTrades = isAdmin || canEditAll || isSelf || hasWrite(activeUserId, 'trades');
+  const canEditDivs   = isAdmin || canEditAll || isSelf || hasWrite(activeUserId, 'dividends');
+  const roTrades = !canEditTrades; // readOnly для buy/sell
+  const roDivs   = !canEditDivs;   // readOnly для dividends
 
   // ---- утилиты по грантам для выбранного владельца ----
   function modesFor(ownerId, resource) {
@@ -245,7 +251,10 @@ export default function Dashboard({ session }) {
                 <Box key={`${activeUserId || meId}-${t.key}`}>
                   {/* для вкладок, которые зависят от владельца — прокидываем filterUserId */}
                   {['buy','sell','dividends','report'].includes(t.key)
-                    ? t.render(activeUserId || meId)
+                    ? t.render(
+                        activeUserId || meId, 
+                        t.key === 'dividends' ? roDivs : (t.key === 'buy' || t.key === 'sell' ? roTrades : false)
+                      )
                     : t.render()}
                 </Box>
               ) : null

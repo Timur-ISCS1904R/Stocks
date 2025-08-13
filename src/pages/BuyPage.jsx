@@ -84,19 +84,20 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
 
   useEffect(() => {
     async function fetchTrades() {
-      const { data, error } = await supabase
+      let q = await supabase
         .from('trades')
         .select('*')
         .eq('trade_type', 'BUY')
         .order('trade_date', { ascending: false });
       if (filterUserId) q = q.eq('user_id', filterUserId);
+      const { data, error } = await q;
       if (!error) {
         setTrades(data);
         setFilteredTrades(data);
       }
     }
     fetchTrades();
-  }, []);
+  }, [filterUserId]);
 
   // Обновление фильтрации
   useEffect(() => {

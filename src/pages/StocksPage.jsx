@@ -156,7 +156,7 @@ export default function StocksPage({ readOnlyDicts = false }) {
         </Grid>
       </Grid>
 
-      <Button variant="contained" onClick={handleAddStock} disabled={readOnlyDicts}>Добавить</Button>
+      <Button variant="contained" onClick => handleOpenDialog()} disabled={readOnlyDicts}>Добавить</Button>
 
       <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
         <Table size="small">
@@ -183,10 +183,10 @@ export default function StocksPage({ readOnlyDicts = false }) {
                   <TableCell>
                     {!readOnlyDicts && (
                       <>
-                        <IconButton onClick={() => onEdit(row)} size="small">
+                        <IconButton onClick={() => handleOpenDialog(stock)} size="small">
                           <EditIcon fontSize="small" />
                         </IconButton>
-                        <IconButton onClick={() => onDelete(row.stock_id)} size="small" color="error">
+                        <IconButton onClick={() => handleDelete(stock.stock_id)} size="small" color="error">
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </>

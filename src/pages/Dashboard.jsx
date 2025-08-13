@@ -111,8 +111,7 @@ export default function Dashboard({ session }) {
 
   // для выбранного пользователя определить, какие вкладки показывать
   const visibleTabs = useMemo(() => {
-    // если админ — все вкладки
-    if (isAdmin) return TAB_CONFIG;
+
 
     // если выбран "я сам" — все вкладки
     if (activeUserId && activeUserId === meId) return TAB_CONFIG;
@@ -133,7 +132,7 @@ export default function Dashboard({ session }) {
     }
 
     // dictionaries:write -> stocks/exchanges
-    if (hasWrite(activeUserId, 'dictionaries')) {
+    if (isSelf)) {
       arr.push('stocks', 'exchanges');
     }
 
@@ -174,7 +173,9 @@ export default function Dashboard({ session }) {
 
           <Stack direction="row" spacing={1}>
             <Button color="inherit" onClick={() => navigate('/account/password')}>Сменить пароль</Button>
-            <Button color="inherit" onClick={() => navigate('/admin')}>Админ</Button>
+            {isAdmin && (
+              <Button color="inherit" onClick={() => navigate('/admin')}>Админ</Button>
+            )}
             <Button color="inherit" onClick={signOut}>Выйти</Button>
           </Stack>
         </Toolbar>

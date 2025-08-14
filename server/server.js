@@ -6,12 +6,31 @@ import { createClient } from '@supabase/supabase-js';
 const app = express();
 app.use(express.json());
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_ORIGIN?.split(',') ?? '*',
-    credentials: false
-  })
-);
+// Нормализуем список доменов и явно разрешаем preflight/headers
+const ALLOWED_ORIGINS = (process.env.FRONTEND_ORIGIN || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, cb) => {
+    // allow non-browser / server-to-server
+    if (!origin) return cb(null, true);
+    // если список пуст — разрешаем всё (для локальной отладки)
+    if (ALLOWED_ORIGINS.length === 0) return cb(null, true);
+    // точное совпадение источника
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(null, false); // нет заголовков CORS
+  },
+  credentials: false, // ты работаешь по Bearer, куки не нужны
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  maxAge: 86400,
+};
+
+app.use(cors(corsOptions));
+// Обязательно отвечаем на preflight
+app.options('*', cors(corsOptions));
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -379,4 +398,5 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(process.env.PORT || 4000, () =>
   console.log(`Admin API listening on :${process.env.PORT || 4000}`)
 );
+
 

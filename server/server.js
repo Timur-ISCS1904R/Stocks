@@ -71,6 +71,24 @@ async function getAuthEmailById(user_id) {
   return data?.user?.email || null;
 }
 
+async function getUserDepsCounts(client, userId) {
+  const [
+    { count: tradesCnt, error: e1 },
+    { count: divCnt,    error: e2 },
+    { count: grantsCnt, error: e3 },
+  ] = await Promise.all([
+    client.from('trades').select('trade_id', { count: 'exact', head: true }).eq('user_id', userId),
+    client.from('dividends').select('dividend_id', { count: 'exact', head: true }).eq('user_id', userId),
+    client.from('user_grants').select('owner_id', { count: 'exact', head: true }).or(`owner_id.eq.${userId},grantee_id.eq.${userId}`),
+  ]);
+  if (e1 || e2 || e3) throw (e1 || e2 || e3);
+  return {
+    trades: tradesCnt ?? 0,
+    dividends: divCnt ?? 0,
+    grants: grantsCnt ?? 0,
+  };
+}
+
 // ---------- USERS ----------
 app.get('/api/users', requireAdmin, async (req, res) => {
   try {
@@ -134,14 +152,71 @@ app.post('/api/admin/users/delete', requireAdmin, async (req, res) => {
     const { user_id } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
-    const { error } = await supabase.auth.admin.deleteUser(user_id);
-    if (error) return res.status(500).json({ error: error.message });
+    // 1) считаем зависимости
+    const counts = await getUserDepsCounts(supabase, user_id);
+    const hasDeps = (counts.trades + counts.dividends + counts.grants) > 0;
 
-    await supabase.from('users').delete().eq('user_id', user_id);
-    res.json({ ok: true });
+    if (!hasDeps) {
+      // 2а) «пустой» пользователь — сначала удаляем в Auth, затем в public.users
+      const { error: authErr } = await supabase.auth.admin.deleteUser(user_id);
+      if (authErr) return res.status(500).json({ error: authErr.message });
+
+      const { error: dbErr } = await supabase.from('users').delete().eq('user_id', user_id);
+      if (dbErr) return res.status(500).json({ error: dbErr.message });
+
+      return res.json({ ok: true, mode: 'hard_delete', counts });
+    }
+
+    // 2б) есть зависимости — выполняем soft-delete (без падения)
+    const softUpdate = {
+      is_active: false,
+      deleted_at: new Date().toISOString(),
+      email_masked: 'deleted',
+    };
+
+    const { error: updErr } = await supabase
+      .from('users')
+      .update(softUpdate)
+      .eq('user_id', user_id);
+    if (updErr) return res.status(500).json({ error: updErr.message });
+
+    // чистим взаимные гранты
+    const { error: grantsErr } = await supabase
+      .from('user_grants')
+      .delete()
+      .or(`owner_id.eq.${user_id},grantee_id.eq.${user_id}`);
+    if (grantsErr) return res.status(500).json({ error: grantsErr.message });
+
+    // (опционально) можно дополнительно отозвать refresh-токены через Admin API
+
+    return res.json({ ok: true, mode: 'soft_delete_fallback', counts });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'delete user error' });
+  }
+});
+
+app.post('/api/admin/users/soft-delete', requireAdmin, async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id required' });
+
+    const { error: updErr } = await supabase
+      .from('users')
+      .update({ is_active: false, deleted_at: new Date().toISOString(), email_masked: 'deleted' })
+      .eq('user_id', user_id);
+    if (updErr) return res.status(500).json({ error: updErr.message });
+
+    const { error: grantsErr } = await supabase
+      .from('user_grants')
+      .delete()
+      .or(`owner_id.eq.${user_id},grantee_id.eq.${user_id}`);
+    if (grantsErr) return res.status(500).json({ error: grantsErr.message });
+
+    return res.json({ ok: true, mode: 'soft_delete' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'soft delete error' });
   }
 });
 
@@ -304,3 +379,4 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(process.env.PORT || 4000, () =>
   console.log(`Admin API listening on :${process.env.PORT || 4000}`)
 );
+

@@ -36,7 +36,23 @@ export async function adminFetch(path, options = {}) {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
-export async function softDeleteUser(userId) {
-  const r = await fetch(`/admin/users/${userId}/soft_delete`, { method: 'POST' });
-  return r.json();
+// «Умное удаление»: hard, если у пользователя нет данных; soft, если есть зависимости
+export async function deleteUserSmart(userId) {
+  const res = await adminFetch('/api/admin/users/delete', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId }),
+  });
+  // ожидаем { ok:true, mode:'hard_delete' | 'soft_delete', counts: {...} }
+  return res;
 }
+
+// Явное отключение (soft-delete) без попытки hard-delete
+export async function softDeleteUser(userId) {
+  const res = await adminFetch('/api/admin/users/soft-delete', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId }),
+  });
+  // ожидаем { ok:true, mode:'soft_delete' }
+  return res;
+}
+

@@ -35,3 +35,8 @@ export async function adminFetch(path, options = {}) {
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
 }
+
+export async function softDeleteUser(userId) {
+  const r = await fetch(`/admin/users/${userId}/soft_delete`, { method: 'POST' });
+  return r.json();
+}

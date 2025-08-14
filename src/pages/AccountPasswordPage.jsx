@@ -4,7 +4,8 @@ import { supabase } from '../supabaseClient';
 import {
   Box, Paper, Typography, TextField, Button, Alert, Stack
 } from '@mui/material';
-
+// Базовый адрес backend’а (как в других местах проекта)
+const ADMIN_API = process.env.REACT_APP_ADMIN_API
 export default function AccountPasswordPage() {
   const [oldPwd, setOldPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -44,9 +45,37 @@ export default function AccountPasswordPage() {
       }
 
       // 2) Меняем пароль
-      const { error } = await supabase.auth.updateUser({ password: newPwd });
-      if (error) setErr(error.message);
-      else setMsg('Пароль успешно изменён');
+      const { error: updErr } = await supabase.auth.updateUser({ password: newPwd });
+      if (updErr){
+        setErr(updErr.message);
+        setLoading(false);
+        return;
+      }
+      // 3) Получаем access_token текущей сессии
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) {
+        setErr('Не удалось получить токен сессии');
+        setLoading(false);
+        return;
+      }
+      // 4) Сообщаем backend’у «первый вход завершён» (сброс must_change_password=false)
+      const resp = await fetch(`${ADMIN_API}/api/self/complete-first-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        setErr(j?.error || 'Не удалось завершить первый вход');
+        setLoading(false);
+        return;
+      }
+ 
+      // 5) Готово
+      setMsg('Пароль успешно изменён');
     } catch (e) {
       setErr('Ошибка смены пароля');
     } finally {

@@ -1,6 +1,7 @@
 // src/admin/AdminPanel.jsx
 // (тот же функционал, только адаптивные отступы/скролл)
 import React, { useEffect, useMemo, useState } from 'react';
+import BlockIcon from '@mui/icons-material/Block';
 import { useNavigate } from 'react-router-dom';
 import {
   AppBar, Toolbar, Typography, Box, Tabs, Tab, Paper,
@@ -17,7 +18,7 @@ import ListIcon from '@mui/icons-material/ListAlt';
 import LinkIcon from '@mui/icons-material/Link';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
-import { adminFetch } from '../lib/adminFetch';
+import { adminFetch, deleteUserSmart, softDeleteUser } from '../lib/adminFetch';
 
 export default function AdminPanel() {
   const [tab, setTab] = useState(0);
@@ -124,10 +125,14 @@ export default function AdminPanel() {
 
   async function removeUser(user_id) {
     if (!window.confirm('Удалить пользователя безвозвратно?')) return;
-    await adminFetch('/api/admin/users/delete', {
-      method: 'POST',
-      body: JSON.stringify({ user_id }),
-    });
+    const res = await deleteUserSmart(user_id); // { ok:true, mode:'hard_delete' | 'soft_delete' }
+    // при soft_delete юзер будет отключен (is_active=false), при hard_delete — полностью удалён
+    await loadAll();
+  }
+
+  async function disableUser(user_id) {
+    if (!window.confirm('Отключить пользователя (soft-delete)?')) return;
+    await softDeleteUser(user_id); // { ok:true, mode:'soft_delete' }
     await loadAll();
   }
 
@@ -225,13 +230,22 @@ export default function AdminPanel() {
                                   onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}/>
                         </TableCell>
                         <TableCell align="center">
-                          <Tooltip title="Удалить пользователя">
-                            <span>
-                              <IconButton color="error" size="small" onClick={() => removeUser(u.id)}>
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          <Stack direction="row" spacing={0.5} justifyContent="center">
+                            <Tooltip title="Отключить (soft-delete)">
+                              <span>
+                                <IconButton size="small" onClick={() => disableUser(u.id)}>
+                                  <BlockIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title="Удалить навсегда">
+                              <span>
+                                <IconButton color="error" size="small" onClick={() => removeUser(u.id)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          </Stack>  
                         </TableCell>
                       </TableRow>
                     );
@@ -522,5 +536,6 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 
 

@@ -18,7 +18,7 @@ import ListIcon from '@mui/icons-material/ListAlt';
 import LinkIcon from '@mui/icons-material/Link';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
-import { adminFetch, deleteUserSmart, softDeleteUser } from '../lib/adminFetch';
+import { adminFetch, deleteUserSmart, softDeleteUser, setUserActive } from '../lib/adminFetch';
 
 export default function AdminPanel() {
   const [tab, setTab] = useState(0);
@@ -536,6 +536,7 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 
 
 

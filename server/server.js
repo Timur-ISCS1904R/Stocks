@@ -418,7 +418,32 @@ app.get('/api/audit', requireAdmin, async (req, res) => {
   }
 });
 
-// ---------- SELF ----------
+// ---------- SELF /* ↓ ДОБАВЬ ЭТО В server.js */
+
+app.get('/api/self/status', requireAuth, async (req, res) => {
+  try {
+    const uid = req.user.id;
+    const { data, error } = await supabase
+      .from('users')
+      .select('is_active')
+      .eq('user_id', uid)
+      .maybeSingle();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // нет строки или флаг выключен — запрещаем доступ
+    if (!data || data.is_active === false) {
+      return res.status(403).json({ error: 'inactive' });
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'status check error' });
+  }
+});
+
+
 app.post('/api/self/complete-first-login', requireAuth, async (req, res) => {
   try {
     const uid = req.user.id;
@@ -439,6 +464,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(process.env.PORT || 4000, () =>
   console.log(`Admin API listening on :${process.env.PORT || 4000}`)
 );
+
 
 
 

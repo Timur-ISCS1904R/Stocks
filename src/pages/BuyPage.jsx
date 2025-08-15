@@ -130,6 +130,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (readOnly) return;
 
     const stock = stocks.find(s => s.ticker === form.ticker);
     if (!stock) {
@@ -180,6 +181,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
   };
 
   const handleDelete = async id => {
+    if (readOnly) return;
     if (!window.confirm('Удалить эту сделку?')) return;
     const { error } = await supabase.from('trades').delete().eq('trade_id', id);
     if (error) {

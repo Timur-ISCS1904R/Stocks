@@ -110,6 +110,34 @@ export default function App() {
     })();
     return () => unsub();
   }, []);
+  
+  useEffect(() => {
+  if (!session) return;
+
+  let cancelled = false;
+  (async () => {
+    try {
+      const base = (process.env.REACT_APP_ADMIN_API || 'http://localhost:4000').replace(/\/+$/, '');
+      const url  = `${base}/api/self/status`;
+      const token = session.access_token;
+
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!cancelled && resp.status === 403) {
+        // пользователь отключён админом — мгновенно выходим
+        alert('Ваш аккаунт отключён администратором.');
+        try { await supabase.auth.signOut({ scope: 'local' }); } catch {}
+        window.location.href = '/';
+      }
+    } catch {
+      // сеть/бекенд недоступен — игнорируем; RLS на БД всё равно защитит
+    }
+  })();
+
+  return () => { cancelled = true; };
+}, [session]);
 
   useEffect(() => {
     if (!session) return setProfile(null);

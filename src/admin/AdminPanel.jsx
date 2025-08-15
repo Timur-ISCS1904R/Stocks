@@ -196,6 +196,7 @@ export default function AdminPanel() {
               <TableHead>
                 <TableRow>
                   <TableCell>Email</TableCell>
+                  <TableCell align="center">Активен</TableCell>
                   <TableCell align="center">is_admin</TableCell>
                   <TableCell align="center">can_view_all</TableCell>
                   <TableCell align="center">can_edit_all</TableCell>
@@ -213,30 +214,37 @@ export default function AdminPanel() {
                       <TableRow key={u.id}>
                         <TableCell sx={{ minWidth: 220 }}>{u.email || u.id}</TableCell>
                         <TableCell align="center">
+                          <Switch
+                            checked={!!u.is_active}
+                            onChange={e => setUserActive(u.id, e.target.checked).then(loadAll)}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
                           <Switch checked={!!u.is_admin}
-                                  onChange={e => savePerm(u.id, { is_admin: e.target.checked })}/>
+                                  onChange={e => savePerm(u.id, { is_admin: e.target.checked })}
+                                  disabled={!u.is_active}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           <Switch checked={!!p.can_view_all}
-                                  onChange={e => savePerm(u.id, { can_view_all: e.target.checked })}/>
+                                  onChange={e => savePerm(u.id, { can_view_all: e.target.checked })}
+                                  disabled={!u.is_active}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           <Switch checked={!!p.can_edit_all}
-                                  onChange={e => savePerm(u.id, { can_edit_all: e.target.checked })}/>
+                                  onChange={e => savePerm(u.id, { can_edit_all: e.target.checked })}
+                                  disabled={!u.is_active}
+                          />
                         </TableCell>
                         <TableCell align="center">
                           <Switch checked={!!p.can_edit_dictionaries}
-                                  onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}/>
+                                  onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}
+                                     
+                          />
                         </TableCell>
                         <TableCell align="center">
                           <Stack direction="row" spacing={0.5} justifyContent="center">
-                            <Tooltip title="Отключить (soft-delete)">
-                              <span>
-                                <IconButton size="small" onClick={() => disableUser(u.id)}>
-                                  <BlockIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
                             <Tooltip title="Удалить навсегда">
                               <span>
                                 <IconButton color="error" size="small" onClick={() => removeUser(u.id)}>
@@ -281,7 +289,7 @@ export default function AdminPanel() {
                   onChange={e => setGrantForm(g => ({ ...g, owner_id: e.target.value }))}
                 >
                   <MenuItem value=""><em>— не задан —</em></MenuItem>
-                  {users.map(u => (
+                  {users.filter(u => u.is_active).map(u => (
                     <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
                   ))}
                 </Select>
@@ -295,7 +303,7 @@ export default function AdminPanel() {
                   onChange={e => setGrantForm(g => ({ ...g, grantee_id: e.target.value }))}
                 >
                   <MenuItem value=""><em>— выбери пользователя —</em></MenuItem>
-                  {users.map(u => (
+                  {users.filter(u => u.is_active).map(u => (
                     <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
                   ))}
                 </Select>
@@ -386,6 +394,11 @@ export default function AdminPanel() {
 
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
               <TextField label="Email" value={newUser.email} onChange={e => setNewUser(s => ({ ...s, email: e.target.value }))}/>
+              <TextField
+                label="Полное имя"
+                value={newUser.full_name}
+                onChange={e => setNewUser(s => ({ ...s, full_name: e.target.value }))}
+              />
               <TextField label="Пароль" type="password" value={newUser.password} onChange={e => setNewUser(s => ({ ...s, password: e.target.value }))}/>
               <FormControl sx={{ minWidth: 160 }}>
                 <InputLabel>is_admin</InputLabel>
@@ -412,7 +425,7 @@ export default function AdminPanel() {
                   onChange={e => setResetPwd(s => ({ ...s, user_id: e.target.value }))}
                 >
                   <MenuItem value=""><em>— выбери —</em></MenuItem>
-                  {users.map(u => (
+                  {users.filter(u => u.is_active).map(u => (
                     <MenuItem key={u.id} value={u.id}>{u.email || u.id}</MenuItem>
                   ))}
                 </Select>
@@ -535,6 +548,7 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 
 
 

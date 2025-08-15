@@ -28,7 +28,7 @@ export default function AdminPanel() {
   const [userPerms, setUserPerms] = useState([]);
   const [grants, setGrants] = useState([]);
 
-  const [newUser, setNewUser] = useState({ email: '', password: '', is_admin: false });
+  const [newUser, setNewUser] = useState({ email: '', password: '', is_admin: false, full_name: '' });
   const [resetPwd, setResetPwd] = useState({ user_id: '', new_password: '' });
 
   const [grantForm, setGrantForm] = useState({
@@ -118,7 +118,7 @@ export default function AdminPanel() {
       method: 'POST',
       body: JSON.stringify(newUser),
     });
-    setNewUser({ email: '', password: '', is_admin: false });
+    setNewUser({ email: '', password: '', is_admin: false, full_name: '' });
     await loadAll();
   }
 
@@ -129,11 +129,6 @@ export default function AdminPanel() {
     await loadAll();
   }
 
-  async function disableUser(user_id) {
-    if (!window.confirm('Отключить пользователя (soft-delete)?')) return;
-    await softDeleteUser(user_id); // { ok:true, mode:'soft_delete' }
-    await loadAll();
-  }
 
   async function resetPassword() {
     if (!resetPwd.user_id || !resetPwd.new_password) return setErr('Выбери пользователя и новый пароль');
@@ -240,7 +235,7 @@ export default function AdminPanel() {
                         <TableCell align="center">
                           <Switch checked={!!p.can_edit_dictionaries}
                                   onChange={e => savePerm(u.id, { can_edit_dictionaries: e.target.checked })}
-                                     
+                                  disabled={!u.is_active}   
                           />
                         </TableCell>
                         <TableCell align="center">
@@ -548,6 +543,7 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 
 
 

@@ -52,7 +52,23 @@ export async function softDeleteUser(userId) {
     method: 'POST',
     body: JSON.stringify({ user_id: userId }),
   });
+  
   // ожидаем { ok:true, mode:'soft_delete' }
   return res;
 }
 
+// Установить активность пользователя
+export async function setUserActive(userId, isActive) {
+  return adminFetch('/api/admin/users/set-active', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, is_active: isActive }),
+  });
+}
+
+// Создать пользователя с full_name (если хочешь вызывать из кода)
+export async function createUserAdmin({ email, password, is_admin, full_name }) {
+  return adminFetch('/api/admin/users/create', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, is_admin, full_name }),
+  });
+}

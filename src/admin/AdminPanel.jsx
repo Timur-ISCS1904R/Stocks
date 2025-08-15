@@ -1,7 +1,6 @@
 // src/admin/AdminPanel.jsx
 // (тот же функционал, только адаптивные отступы/скролл)
 import React, { useEffect, useMemo, useState } from 'react';
-import BlockIcon from '@mui/icons-material/Block';
 import { useNavigate } from 'react-router-dom';
 import {
   AppBar, Toolbar, Typography, Box, Tabs, Tab, Paper,
@@ -18,7 +17,7 @@ import ListIcon from '@mui/icons-material/ListAlt';
 import LinkIcon from '@mui/icons-material/Link';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 
-import { adminFetch, deleteUserSmart, softDeleteUser, setUserActive } from '../lib/adminFetch';
+import { adminFetch, deleteUserSmart, setUserActive } from '../lib/adminFetch';
 
 export default function AdminPanel() {
   const [tab, setTab] = useState(0);
@@ -536,6 +535,7 @@ export default function AdminPanel() {
     </Box>
   );
 }
+
 
 
 

@@ -160,6 +160,7 @@ export default function BuyPage({ filterUserId = null, readOnly = false }) {
         price_per_share: price,
         quantity,
         total_amount
+        ...(filterUserId ? { user_id: filterUserId } : {})
       }])
       .select();
 

@@ -150,6 +150,7 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
   }, [filterTicker, filterDateFrom, filterDateTo, trades, allStocks]);
 
   const handleChange = e => {
+    if (readOnly) return;
     const { name, value } = e.target;
     if (name === 'quantity' && form.ticker) {
       const stock = stocks.find(s => s.ticker === form.ticker);
@@ -167,6 +168,7 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (readOnly) return;
 
     const stock = stocks.find(s => s.ticker === form.ticker);
     if (!stock) {

@@ -244,6 +244,7 @@ export default function DividendsPage({ filterUserId = null, readOnly = false })
   };
 
   const handleDelete = async id => {
+    if (readOnly) return;
     if (!window.confirm('Удалить этот дивиденд?')) return;
     const { error } = await supabase.from('dividends').delete().eq('dividend_id', id);
     if (error) {

@@ -204,7 +204,7 @@ export default function SellPage({ filterUserId = null, readOnly = false }) {
         trade_type: 'SELL',
         price_per_share: price,
         quantity,
-        total_amount
+        total_amount,
         ...(filterUserId ? { user_id: filterUserId } : {})
       }])
       .select();

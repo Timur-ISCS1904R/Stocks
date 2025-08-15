@@ -119,7 +119,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
     if (ids.length) {
       const { data: rows, error: pErr } = await supabase
         .from('users')
-        .select('user_id, is_admin, email')
+        .select('user_id, is_admin, email, is_active, full_name')
         .in('user_id', ids);
       if (pErr) return res.status(500).json({ error: pErr.message });
       profiles = rows || [];
@@ -128,7 +128,9 @@ app.get('/api/users', requireAdmin, async (req, res) => {
     const result = data.users.map(u => ({
       id: u.id,
       email: u.email,
-      is_admin: idx.get(u.id)?.is_admin ?? false
+      is_admin: idx.get(u.id)?.is_admin ?? false,
+      is_active: idx.get(u.id)?.is_active ?? true,
+      full_name: idx.get(u.id)?.full_name ?? null,
     }));
     res.json(result);
   } catch (e) {
@@ -139,7 +141,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
 
 app.post('/api/admin/users/create', requireAdmin, async (req, res) => {
   try {
-    const { email, password, is_admin = false } = req.body;
+    const { email, password, is_admin = false, full_name = null } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email & password required' });
 
     const { data, error } = await supabase.auth.admin.createUser({
@@ -155,7 +157,8 @@ app.post('/api/admin/users/create', requireAdmin, async (req, res) => {
         user_id: uid,
         email,
         is_admin,
-        must_change_password: true
+        must_change_password: true,
+        full_name
       });
       if (upErr) return res.status(500).json({ error: upErr.message });
     }
@@ -171,44 +174,34 @@ app.post('/api/admin/users/delete', requireAdmin, async (req, res) => {
     const { user_id } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id required' });
 
-    // 1) считаем зависимости
-    const counts = await getUserDepsCounts(supabase, user_id);
-    const hasDeps = (counts.trades + counts.dividends + counts.grants) > 0;
-
-    if (!hasDeps) {
-      // 2а) «пустой» пользователь — сначала удаляем в Auth, затем в public.users
-      const { error: authErr } = await supabase.auth.admin.deleteUser(user_id);
-      if (authErr) return res.status(500).json({ error: authErr.message });
-
-      const { error: dbErr } = await supabase.from('users').delete().eq('user_id', user_id);
-      if (dbErr) return res.status(500).json({ error: dbErr.message });
-
-      return res.json({ ok: true, mode: 'hard_delete', counts });
-    }
-
-    // 2б) есть зависимости — выполняем soft-delete (без падения)
-    const softUpdate = {
-      is_active: false,
-      deleted_at: new Date().toISOString(),
-      email_masked: 'deleted',
-    };
-
-    const { error: updErr } = await supabase
-      .from('users')
-      .update(softUpdate)
-      .eq('user_id', user_id);
-    if (updErr) return res.status(500).json({ error: updErr.message });
-
-    // чистим взаимные гранты
-    const { error: grantsErr } = await supabase
-      .from('user_grants')
-      .delete()
-      .or(`owner_id.eq.${user_id},grantee_id.eq.${user_id}`);
-    if (grantsErr) return res.status(500).json({ error: grantsErr.message });
-
-    // (опционально) можно дополнительно отозвать refresh-токены через Admin API
-
-    return res.json({ ok: true, mode: 'soft_delete_fallback', counts });
+    // Порядок: сначала чистим все зависимости, потом удаляем пользователя в БД и Auth
+    // trades / dividends
+    const [{ error: et }, { error: ed }] = await Promise.all([
+      supabase.from('trades').delete().eq('user_id', user_id),
+      supabase.from('dividends').delete().eq('user_id', user_id),
+    ]);
+    if (et || ed) return res.status(500).json({ error: (et || ed).message });
+ 
+    // grants / permissions
+    const [{ error: eg }, { error: ep }] = await Promise.all([
+      supabase.from('user_grants').delete().or(`owner_id.eq.${user_id},grantee_id.eq.${user_id}`),
+      supabase.from('user_permissions').delete().eq('user_id', user_id),
+    ]);
+    if (eg || ep) return res.status(500).json({ error: (eg || ep).message });
+ 
+    // audit (если ведёшь по actor/target)
+    await supabase.from('audit_log').delete().or(`actor_id.eq.${user_id},target_user_id.eq.${user_id}`);
+    // игнорируем ошибку audit_log, если таблицы/полей нет — по желанию можно обернуть в try
+ 
+    // удаляем запись в public.users
+    const { error: du } = await supabase.from('users').delete().eq('user_id', user_id);
+    if (du) return res.status(500).json({ error: du.message });
+ 
+    // и учётку в Auth (последним шагом)
+    const { error: authErr } = await supabase.auth.admin.deleteUser(user_id);
+    if (authErr) return res.status(500).json({ error: authErr.message });
+ 
+    return res.json({ ok: true, mode: 'hard_delete' });   
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'delete user error' });
@@ -239,6 +232,35 @@ app.post('/api/admin/users/soft-delete', requireAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/admin/users/set-active', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, is_active } = req.body;
+    if (!user_id || typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'user_id & is_active required' });
+    }
+    const { error } = await supabase
+      .from('users')
+      .update({
+        is_active,
+        ...(is_active ? { deleted_at: null } : { deleted_at: new Date().toISOString(), email_masked: 'deleted' }),
+      })
+      .eq('user_id', user_id);
+    if (error) return res.status(500).json({ error: error.message });
+    // если отключаем — чистим гранты, чтобы не фигурировал в выдачах
+    if (!is_active) {
+      const { error: eg } = await supabase
+        .from('user_grants')
+        .delete()
+        .or(`owner_id.eq.${user_id},grantee_id.eq.${user_id}`);
+      if (eg) return res.status(500).json({ error: eg.message });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'set-active error' });
+  }
+});
+
 app.post('/api/admin/users/reset-password', requireAdmin, async (req, res) => {
   try {
     const { user_id, new_password } = req.body;
@@ -259,7 +281,7 @@ app.get('/api/permissions', requireAdmin, async (req, res) => {
     const [perms, grants, admins] = await Promise.all([
       supabase.from('user_permissions').select('*'),
       supabase.from('user_grants').select('*'),
-      supabase.from('users').select('user_id, is_admin, email')
+      supabase.from('users').select('user_id, is_admin, email, is_active, full_name')
     ]);
     if (perms.error) return res.status(500).json({ error: perms.error.message });
     if (grants.error) return res.status(500).json({ error: grants.error.message });
@@ -280,7 +302,16 @@ app.post('/api/permissions', requireAdmin, async (req, res) => {
   try {
     const { user_id, can_view_all = false, can_edit_all = false, can_edit_dictionaries = false, is_admin = false } = req.body;
     if (!user_id) return res.status(400).json({ error: 'user_id required' });
-
+    // блокируем выдачу прав неактивным пользователям
+    const { data: urow, error: uerr } = await supabase
+      .from('users')
+      .select('is_active')
+      .eq('user_id', user_id)
+      .maybeSingle();
+    if (uerr) return res.status(500).json({ error: uerr.message });
+    if (urow && urow.is_active === false) {
+      return res.status(403).json({ error: 'cannot grant permissions to inactive user' });
+    }
     // upsert user_permissions
     const { error: e1 } = await supabase
       .from('user_permissions')
@@ -324,6 +355,16 @@ app.post('/api/grant', requireAdmin, async (req, res) => {
     const { resource, owner_id = null, grantee_id, mode } = req.body;
     if (!resource || !grantee_id || !mode) {
       return res.status(400).json({ error: 'resource, grantee_id, mode required' });
+    }
+    // нельзя выдавать грант неактивным
+    const idsToCheck = [grantee_id, ...(owner_id ? [owner_id] : [])];
+    const { data: usersState, error: usErr } = await supabase
+      .from('users')
+      .select('user_id, is_active')
+      .in('user_id', idsToCheck);
+    if (usErr) return res.status(500).json({ error: usErr.message });
+    if ((usersState || []).some(r => r.is_active === false)) {
+      return res.status(403).json({ error: 'cannot grant to inactive user' });
     }
     const { error } = await supabase
       .from('user_grants')
@@ -398,5 +439,6 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.listen(process.env.PORT || 4000, () =>
   console.log(`Admin API listening on :${process.env.PORT || 4000}`)
 );
+
 
 

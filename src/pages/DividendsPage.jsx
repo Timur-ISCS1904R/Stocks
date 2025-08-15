@@ -188,6 +188,7 @@ export default function DividendsPage({ filterUserId = null, readOnly = false })
 
   const handleSubmit = async e => {
     e.preventDefault();
+    if (readOnly) return;
 
     const stock = stocks.find(s => s.ticker === form.ticker);
     if (!stock) {
@@ -223,6 +224,7 @@ export default function DividendsPage({ filterUserId = null, readOnly = false })
         quantity,
         amount_per_share,
         total_amount,
+        ...(filterUserId ? { user_id: filterUserId } : {})
       }])
       .select();
 
